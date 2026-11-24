@@ -70,7 +70,7 @@ export function createRingsMaterial(uniforms: BeaconUniforms): ShaderMaterial {
     vertexShader: /* glsl */ `
       varying vec2 vLocal;
       void main() {
-        vLocal = position.xy;
+        vLocal = position.xz;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
     `,

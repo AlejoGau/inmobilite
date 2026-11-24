@@ -40,14 +40,24 @@ npm run dev                 # http://localhost:3000
 
 ### La escena 3D a medias
 
-Un agente la estaba construyendo cuando se hizo el push. Al momento del push existen:
+Un agente la estaba construyendo cuando se hizo el último push (24/11, 18:05), y todavía seguía. Al momento del push existen:
 
-- `director/` (timeline central con GSAP + test): `director.ts`, `cameraPose.ts`, `stagger.ts`.
-- `geometry/` (constructores puros): calles en cinta con uniones, marcas viales, edificios, suelo, árboles.
+- `director/`: timeline central con GSAP + test (`director.ts`, `cameraPose.ts`, `stagger.ts`).
+- `geometry/`: constructores puros de calles en cinta con uniones, marcas viales, edificios, suelo y árboles.
+- `materials/`: `buildingMaterial.ts` (edificios), `groundFx.ts`, `beaconMaterials.ts` (tiene el error de tipos de arriba).
+- `components/`: `Buildings`, `Ground`, `Trees`, `Beacon`, `SelectionTag`.
+- `runtime/`: `SceneDriver.tsx` (la única fuente de tiempo), `SceneRuntime.tsx`, `frameBus.ts` (publica el frame), `ExploreControls.tsx`, `useDisposable.ts`.
 - `config/palette.ts`, `testing/sampleArea.ts`.
-- `materials/`, recién empezado: `groundFx.ts`, `beaconMaterials.ts` (con el error de tipos de arriba).
 
-**Falta:** terminar los materiales (shader de ventanas de los edificios), los componentes R3F (edificios, calles, árboles, baliza, etiquetas), el `SceneDriver` y su contexto, la iluminación con sombras, el postprocesado, la interacción (hover, selección, CameraControls), `CityStage` y **`src/features/scene/index.ts`**, y la regla de ESLint.
+**Falta** (verificarlo contra la carpeta, porque el agente pudo haber avanzado más):
+
+- las etiquetas de calles;
+- la iluminación con sombras y el entorno;
+- el postprocesado (AO, bloom, tone mapping) y los niveles de calidad;
+- el componente `CityStage` y **`src/features/scene/index.ts`**;
+- la regla de ESLint contra `useFrame`;
+- arreglar el error de `beaconMaterials.ts`;
+- y, sobre todo, **verla andar en el navegador**: nada de la escena final se probó todavía visualmente.
 
 La especificación completa está en **[docs/briefs/scene-3d.md](docs/briefs/scene-3d.md)**. Si el agente siguió trabajando en la máquina de la oficina después del push, ese avance quedó **solo ahí**. Antes de rehacer nada en casa, fijate si en GitHub hay un commit más nuevo.
 
