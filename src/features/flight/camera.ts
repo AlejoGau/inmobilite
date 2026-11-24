@@ -35,8 +35,8 @@ interface Viewport {
 }
 
 /**
- * The idle globe sits low in the frame, below the hero copy, so the top
- * padding pushes the visual centre down.
+ * The idle globe rises from the bottom of the frame, under the hero copy: the
+ * top padding pushes its centre down by a quarter of the screen.
  */
 export function homeCamera(viewport: Viewport): JumpToOptions {
   return {
@@ -44,7 +44,7 @@ export function homeCamera(viewport: Viewport): JumpToOptions {
     zoom: viewport.width < PHONE_MAX_WIDTH ? HOME_ZOOM_PHONE : HOME_ZOOM_DESKTOP,
     pitch: 0,
     bearing: 0,
-    padding: { top: Math.round(viewport.height * 0.26), bottom: 0, left: 0, right: 0 },
+    padding: { top: Math.round(viewport.height * 0.46), bottom: 0, left: 0, right: 0 },
   };
 }
 

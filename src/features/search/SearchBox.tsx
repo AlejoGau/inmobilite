@@ -16,6 +16,8 @@ export interface SearchBoxProps {
   onFirstInput?: () => void;
   placeholder?: string;
   autoFocus?: boolean;
+  /** Whether "/" focuses this box. Only the box on screen should claim it. */
+  shortcut?: boolean;
   className?: string;
 }
 
@@ -29,6 +31,7 @@ export function SearchBox({
   onFirstInput,
   placeholder = "Probá: acoyte y riva",
   autoFocus = false,
+  shortcut = true,
   className,
 }: SearchBoxProps) {
   const uid = useId();
@@ -49,7 +52,7 @@ export function SearchBox({
   const expanded = open && search.status !== "idle";
   const activeId = expanded && activeIndex >= 0 ? optionId(activeIndex) : undefined;
 
-  useSlashShortcut(inputRef);
+  useSlashShortcut(inputRef, shortcut);
 
   function optionId(index: number) {
     return `${uid}-option-${index}`;

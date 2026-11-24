@@ -40,7 +40,7 @@ const LARGE_COMMERCIAL_AREA = 600;
  * houses with mid-rise blocks, so low-to-mid heights dominate but towers
  * still appear.
  */
-const GENERIC_LEVEL_WEIGHTS = [3, 3, 2.6, 2.2, 1.8, 1.5, 1.2, 1] as const;
+const GENERIC_LEVEL_WEIGHTS: readonly number[] = [3, 3, 2.6, 2.2, 1.8, 1.5, 1.2, 1];
 
 const RESIDENTIAL_TYPES = new Set([
   "apartments", "residential", "house", "detached", "semidetached_house", "terrace", "dormitory", "bungalow",

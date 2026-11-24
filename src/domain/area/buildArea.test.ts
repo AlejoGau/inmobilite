@@ -13,7 +13,7 @@ import { MAX_TREES, TREE_SCALE_RANGE } from "./trees";
 import { ROAD_CLIP_MARGIN } from "./roads";
 
 const ORIGIN = { lat: -34.6183, lng: -58.43646 };
-const OSM = fixture as OverpassResponse;
+const OSM = fixture as unknown as OverpassResponse;
 const build = (): AreaModel => buildArea({ origin: ORIGIN, osm: OSM });
 
 describe("buildArea (Acoyte y Rivadavia fixture)", () => {

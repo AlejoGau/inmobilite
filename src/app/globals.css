@@ -1,26 +1,199 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * Inmobilite tokens. Dark first: the UI is glass laid over a deep blue-slate
+ * 3D scene (#0e1218 → #161b24), so surfaces are translucent tints of that
+ * ground and the only hue is the teal of the scene's beacon.
+ */
+@theme {
+  --color-ground: #0e1218;
+  --color-ground-raised: #161b24;
+
+  /* Glass over the map or the scene. Strong = over busy content (lists, cards). */
+  --color-surface: rgb(17 22 30 / 0.62);
+  --color-surface-strong: rgb(19 25 34 / 0.86);
+  --color-border: rgb(255 255 255 / 0.09);
+  --color-border-strong: rgb(255 255 255 / 0.16);
+
+  /* Text: ~15:1 and ~8:1 on the ground; both clear 4.5:1 on any glass here. */
+  --color-text: #eef2f6;
+  --color-text-muted: #a3adbb;
+
+  /* Accent = the 3D beacon. Ink is the text colour on a filled accent (≈ 7:1). */
+  --color-accent: #14b8a6;
+  --color-accent-strong: #2dd4bf;
+  --color-accent-soft: rgb(20 184 166 / 0.16);
+  --color-accent-ink: #042f2b;
+
+  --color-danger: #f87171;
+  --color-focus: #5eead4;
+
+  --radius-panel: 1.25rem;
+  --shadow-float: 0 18px 48px -12px rgb(0 0 0 / 0.55);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bricolage), var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  html {
+    color-scheme: dark;
+    background-color: var(--color-ground);
+  }
+
+  body {
+    background-color: var(--color-ground);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: rgb(20 184 166 / 0.35);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  .glass {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+  }
+
+  .glass-strong {
+    background-color: var(--color-surface-strong);
+    border: 1px solid var(--color-border-strong);
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+  }
+
+  /* Without blur, translucent panels lose legibility: fall back to opaque glass. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass,
+    .glass-strong {
+      background-color: var(--color-ground-raised);
+    }
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Map → stage crossfade (~700 ms). Entry uses @starting-style, so it animates on mount. */
+  .stage-layer {
+    opacity: 1;
+    transition: opacity 700ms var(--ease-out-quint);
+  }
+  @starting-style {
+    .stage-layer {
+      opacity: 0;
+    }
+  }
+  .stage-layer--hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Hero and compact search stay mounted and fade, so leaving and coming back are symmetric. */
+  .hero,
+  .topbar-search {
+    transition:
+      opacity 420ms var(--ease-out-quint),
+      transform 420ms var(--ease-out-quint),
+      visibility 0s linear 0s;
+  }
+  .hero--hidden {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.985);
+    visibility: hidden;
+    transition:
+      opacity 360ms var(--ease-out-quint),
+      transform 360ms var(--ease-out-quint),
+      visibility 0s linear 360ms;
+  }
+  .topbar-search--hidden {
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity 240ms ease-out,
+      visibility 0s linear 240ms;
+  }
+
+  .animate-rise {
+    animation: rise-in 520ms var(--ease-out-quint) both;
+  }
+
+  .search-pulse {
+    animation: pulse-dot 1s ease-in-out infinite;
+  }
+
+  .status-sweep {
+    animation: sweep 1.6s var(--ease-out-quint) infinite;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pulse-dot {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+/* MapLibre attribution, restyled to sit quietly on the dark globe. */
+.globe-flight .maplibregl-ctrl-attrib {
+  background-color: var(--color-surface) !important;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  border-radius: 999px;
+}
+.globe-flight .maplibregl-ctrl-attrib a {
+  color: var(--color-text-muted);
+}
+.globe-flight .maplibregl-ctrl-attrib-button {
+  filter: invert(1) opacity(0.7);
+}
+.globe-flight .maplibregl-ctrl-bottom-right {
+  bottom: env(safe-area-inset-bottom);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    /* Kept non-zero so transitionend still fires (the stage unmounts on it). */
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+  }
 }

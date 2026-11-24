@@ -8,8 +8,9 @@ function isEditable(target: EventTarget | null): boolean {
 }
 
 /** "/" focuses the search from anywhere, unless the user is already typing somewhere. */
-export function useSlashShortcut(inputRef: RefObject<HTMLInputElement | null>): void {
+export function useSlashShortcut(inputRef: RefObject<HTMLInputElement | null>, enabled = true): void {
   useEffect(() => {
+    if (!enabled) return;
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey || isEditable(event.target)) return;
       event.preventDefault();
@@ -17,5 +18,5 @@ export function useSlashShortcut(inputRef: RefObject<HTMLInputElement | null>): 
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [inputRef]);
+  }, [inputRef, enabled]);
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import type { AreaStats } from "@/domain/types";
 import { Button } from "@/ui/Button";
 import { cn } from "@/ui/cn";
@@ -62,14 +62,14 @@ export function InfoPanel({ label, secondary, stats, showLabels, onToggleLabels,
 
       <div
         id={detailsId}
-        className={cn("min-h-0 overflow-y-auto overscroll-contain", expanded ? "block" : "max-md:hidden")}
+        className={cn("min-h-0 overflow-y-auto overscroll-contain md:overflow-visible", expanded ? "block" : "max-md:hidden")}
       >
         <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-1">
           <Stat value={stats.buildings} label={buildingsModelled(stats.buildings)} />
           <Stat
             value={stats.estimatedHeights}
             label={estimatedHeights(stats.estimatedHeights)}
-            help={<InfoTip label="Cómo se calculan las alturas">{ESTIMATED_HEIGHTS_HELP}</InfoTip>}
+            help={<InfoTip label="Cómo se calculan las alturas" placement="bottom-end">{ESTIMATED_HEIGHTS_HELP}</InfoTip>}
           />
         </dl>
 
@@ -102,7 +102,7 @@ export function InfoPanel({ label, secondary, stats, showLabels, onToggleLabels,
   );
 }
 
-function Stat({ value, label, help }: { value: number; label: string; help?: React.ReactNode }) {
+function Stat({ value, label, help }: { value: number; label: string; help?: ReactNode }) {
   return (
     <div className="flex flex-col-reverse">
       <dt className="flex items-center gap-1.5 text-[0.8125rem] leading-snug text-text-muted">

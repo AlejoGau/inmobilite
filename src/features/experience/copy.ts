@@ -22,6 +22,11 @@ export function flyingStatus(label: string): string {
 
 export const MODELLING_STATUS = `Modelando hasta ${MAX_BUILDINGS} edificios…`;
 
+/** Shown during the flight when the area arrived before the camera did. */
+export function buildingsReady(count: number): string {
+  return `${count} ${plural(count, "edificio listo", "edificios listos")}`;
+}
+
 export function buildingsModelled(count: number): string {
   return plural(count, "edificio cercano modelado", "edificios cercanos modelados");
 }

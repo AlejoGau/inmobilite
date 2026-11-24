@@ -5,6 +5,8 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { Map as MapLibreMap, MapLibreEvent } from "maplibre-gl";
 import { cn } from "@/ui/cn";
 import { usePrefersReducedMotion } from "@/ui/usePrefersReducedMotion";
+import { applyGlobePalette } from "./globePalette";
+import { configureMaplibreWorker } from "./maplibreWorker";
 import {
   arrivalCamera,
   flightHome,
@@ -61,7 +63,9 @@ export function GlobeFlight({ target, onArrive, className }: GlobeFlightProps) {
 
     // maplibre touches `window` on import, so it only loads in the browser.
     import("maplibre-gl")
-      .then(({ Map }) => {
+      .then((maplibre) => {
+        configureMaplibreWorker(maplibre);
+        const { Map } = maplibre;
         const container = containerRef.current;
         if (disposed || !container) return;
         const start = initialTarget.current;
@@ -84,6 +88,7 @@ export function GlobeFlight({ target, onArrive, className }: GlobeFlightProps) {
         created.on("style.load", () => {
           created.setProjection({ type: "globe" });
           created.setSky(SKY);
+          applyGlobePalette(created);
         });
         setMap(created);
       })
@@ -129,7 +134,7 @@ export function GlobeFlight({ target, onArrive, className }: GlobeFlightProps) {
   }, [map, failed, key, lng, lat, mode, reducedMotion]);
 
   return (
-    <div className={cn("globe-flight absolute inset-0 bg-ground", className)} aria-hidden="true">
+    <div className={cn("globe-flight absolute inset-0 bg-ground", className)}>
       {/* MapLibre requires an empty container with real dimensions. */}
       <div ref={containerRef} className="absolute inset-0 h-full w-full" />
     </div>

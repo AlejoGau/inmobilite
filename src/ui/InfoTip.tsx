@@ -8,14 +8,21 @@ interface InfoTipProps {
   /** Accessible name of the trigger, e.g. "Qué significa". */
   label: string;
   children: string;
+  /** Where the bubble opens. "bottom-end" stays inside scroll containers and narrow sheets. */
+  placement?: "top" | "bottom-end";
   className?: string;
 }
+
+const PLACEMENTS = {
+  top: "bottom-full left-1/2 mb-2 -translate-x-1/2",
+  "bottom-end": "top-full right-0 mt-2",
+} as const;
 
 /**
  * A small explanatory tooltip. It opens on hover and focus for pointer and
  * keyboard users, and toggles on tap, since touch screens have no hover.
  */
-export function InfoTip({ label, children, className }: InfoTipProps) {
+export function InfoTip({ label, children, placement = "top", className }: InfoTipProps) {
   const id = useId();
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -53,9 +60,10 @@ export function InfoTip({ label, children, className }: InfoTipProps) {
         id={id}
         role="tooltip"
         className={cn(
-          "glass-strong pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-64 -translate-x-1/2 rounded-xl px-3.5 py-2.5",
+          "glass-strong pointer-events-none absolute z-30 w-64 max-w-[calc(100vw-3rem)] rounded-xl px-3.5 py-2.5",
+          PLACEMENTS[placement],
           "text-[0.8125rem] leading-snug text-text shadow-float transition-[opacity,transform] duration-150",
-          open ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0",
+          open ? "opacity-100" : "opacity-0",
         )}
       >
         {children}

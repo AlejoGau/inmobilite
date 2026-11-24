@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# capturas y logs del navegador de prueba (Playwright MCP)
+/.playwright-mcp/
+
+# generado por scripts/copy-maplibre-worker.mjs
+/public/vendor/

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { GeocodeResult } from "@/domain/types";
 import { cn } from "@/ui/cn";
 import { fetchGeocode, isAbortError } from "./geocodeClient";
-import { QUICK_PICKS } from "./quickPicks";
+import { QUICK_PICKS } from "./quickPickOptions";
 
 interface QuickPicksProps {
   onStart: () => void;
