@@ -39,7 +39,11 @@ export interface Director {
   buildingRiseLinear(index: number, frame: DirectorFrame): number;
   /** Eased pop (with a little overshoot) of tree `index` (same order as area.trees). */
   treePop(index: number, frame: DirectorFrame): number;
-  /** Frees the GSAP timeline. The director must not be used afterwards. */
+  /**
+   * Kills the GSAP timeline; the director must not be used afterwards. Optional:
+   * the timeline is detached from GSAP's global clock, so an unused director
+   * is simply garbage collected.
+   */
   dispose(): void;
 }
 

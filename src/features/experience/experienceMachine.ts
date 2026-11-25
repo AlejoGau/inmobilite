@@ -96,7 +96,10 @@ export function experienceReducer(state: ExperienceState, event: ExperienceEvent
       };
 
     case "flightEnded":
-      if (event.searchId !== state.searchId || state.phase !== "flying" || state.flightDone) return state;
+      if (event.searchId !== state.searchId || state.flightDone) return state;
+      // The globe keeps flying under the error toast and reports its landing only once,
+      // so record it there too: a later retry must not wait for a landing that already happened.
+      if (state.phase !== "flying" && state.phase !== "error") return state;
       return materializeIfReady({ ...state, flightDone: true });
 
     case "areaLoaded":

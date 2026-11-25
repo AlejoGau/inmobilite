@@ -1,7 +1,7 @@
 # Brief: Inmobilite 3D scene (`src/features/scene`)
 
-> Spec for finishing the real-time 3D scene. Written for whoever picks it up (a person or Claude).
-> Part of it already exists: read `src/features/scene/**` first and continue from there.
+> Spec of the real-time 3D scene. **Implemented** in `src/features/scene/**` and integrated in the app
+> (24/11/2026). Keep it as the reference for the rules and the art direction when changing the scene.
 > Context: [HANDOFF.md](../../HANDOFF.md), [PLAN.md](../../PLAN.md), the contract in `src/domain/types.ts`.
 
 ## Goal
@@ -32,9 +32,9 @@ export interface CityStageProps {
 export function CityStage(props: CityStageProps): JSX.Element; // fills its parent
 ```
 
-The app loads it via `src/features/experience/stageLoader.ts` (`m.CityStage`). While it is missing,
-`tsconfig.json` maps `@/features/scene` to the temporary preview in `src/dev/scene-preview/`.
-Remove that mapping when this module exists.
+The app loads it lazily, in the browser only, through `src/features/experience/stageLoader.ts` and
+`useSceneModule.ts` (with a retryable load and an error boundary in `StageLayer.tsx`). The start pose
+of the intro is shared with the map flight in `src/domain/handoffCamera.ts`.
 
 ## Mandatory architecture
 

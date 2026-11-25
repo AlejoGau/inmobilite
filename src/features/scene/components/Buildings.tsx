@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable react-hooks/immutability -- three.js objects (uniforms, meshes, renderer) are mutated imperatively outside render, by design. */
+
 import { useThree, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import type { Mesh } from "three";
@@ -7,7 +9,6 @@ import type { AreaModel, Building } from "@/domain/types";
 import { buildBuildingGeometry, type BuildingMeshData } from "../geometry/buildingGeometry";
 import { createBuildingMaterial, type BuildingMaterial } from "../materials/buildingMaterial";
 import { useDirectorFrame, useSceneRuntime } from "../runtime/SceneRuntime";
-import { useDisposable } from "../runtime/useDisposable";
 import { SelectionTag } from "./SelectionTag";
 
 /** Pointer travel (px) above which a press is a drag (orbiting), not a click. */
@@ -26,6 +27,8 @@ export interface BuildingsProps {
   area: AreaModel;
   selectedBuildingId: string | null;
   onSelectBuilding: (building: Building | null) => void;
+  /** Whether the click that ends the current press may select (see StageInteraction). */
+  clickMaySelect: () => boolean;
 }
 
 /**
@@ -33,48 +36,50 @@ export interface BuildingsProps {
  * a plain raycast. They rise from the corner outwards, scaled in Y by the
  * director, with a light line riding on top while they grow.
  */
-export function Buildings({ area, selectedBuildingId, onSelectBuilding }: BuildingsProps) {
+export function Buildings({ area, selectedBuildingId, onSelectBuilding, clickMaySelect }: BuildingsProps) {
   const { director, exploring } = useSceneRuntime();
   const gl = useThree((s) => s.gl);
 
-  const parts = useDisposable(() => {
-    const list: BuildingPart[] = area.buildings.map((building) => {
-      const mesh = buildBuildingGeometry(building);
-      return { building, mesh, material: createBuildingMaterial(building, mesh) };
-    });
-    return Object.assign(list, {
-      dispose() {
-        for (const p of list) {
-          p.mesh.geometry.dispose();
-          p.material.material.dispose();
-        }
-      },
-    });
-  }, [area]);
+  const parts = useMemo(
+    () =>
+      area.buildings.map((building): BuildingPart => {
+        const mesh = buildBuildingGeometry(building);
+        return { building, mesh, material: createBuildingMaterial(building, mesh) };
+      }),
+    [area],
+  );
+  useEffect(
+    () => () => {
+      for (const p of parts) {
+        p.mesh.geometry.dispose();
+        p.material.material.dispose();
+      }
+    },
+    [parts],
+  );
 
   const meshes = useRef<Array<Mesh | null>>([]);
+  // The building under the pointer, tracked during the intro too: R3F reports
+  // entering a mesh only once, so a hover that began mid-intro must already be
+  // known at the hand-over. Only what it shows (cursor, highlight) waits for
+  // exploration. A replay keeps it, as R3F keeps the building booked as hovered.
   const hovered = useRef<string | null>(null);
   const highlight = useMemo(() => new Float64Array(parts.length), [parts]);
   const lastT = useRef(0);
-  const selected = useRef(selectedBuildingId);
-  useEffect(() => {
-    selected.current = selectedBuildingId;
-  }, [selectedBuildingId]);
 
-  // A replay starts with no hover and the default cursor.
+  // The hand-over shows the pointer cursor for a hover that began during the intro; a replay hides it.
   useEffect(() => {
-    if (exploring) return;
-    hovered.current = null;
-    gl.domElement.style.cursor = "";
+    gl.domElement.style.cursor = exploring && hovered.current ? "pointer" : "";
   }, [exploring, gl]);
 
   useDirectorFrame((frame) => {
     const dt = Math.min(Math.max(frame.t - lastT.current, 0), 0.1);
     lastT.current = frame.t;
     const follow = 1 - Math.exp(-dt * HIGHLIGHT_RATE);
-    parts.forEach((part, i) => {
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
       const mesh = meshes.current[i];
-      if (!mesh) return;
+      if (!mesh) continue;
       const rise = director.buildingRise(i, frame);
       const linear = director.buildingRiseLinear(i, frame);
       mesh.visible = linear > 0;
@@ -84,18 +89,18 @@ export function Buildings({ area, selectedBuildingId, onSelectBuilding }: Buildi
       // Brightest as the building starts to grow, gone once it has settled.
       u.uEdgeGlow.value = linear > 0 && linear < 1 ? Math.pow(1 - linear, 1.4) * Math.min(1, linear * 25) : 0;
       const id = part.building.id;
-      const target = id === selected.current ? 1 : id === hovered.current ? HOVER_LEVEL : 0;
+      const target = id === selectedBuildingId ? 1 : exploring && id === hovered.current ? HOVER_LEVEL : 0;
       highlight[i] += (target - highlight[i]) * follow;
       u.uHighlight.value = highlight[i];
-    });
+    }
   });
 
   const handlers = (building: Building) => ({
     onPointerOver: (e: ThreeEvent<PointerEvent>) => {
-      if (!exploring) return;
+      // Stopped even during the intro, so R3F books only the front building as hovered.
       e.stopPropagation();
       hovered.current = building.id;
-      gl.domElement.style.cursor = "pointer";
+      if (exploring) gl.domElement.style.cursor = "pointer";
     },
     onPointerOut: () => {
       if (hovered.current !== building.id) return;
@@ -103,7 +108,7 @@ export function Buildings({ area, selectedBuildingId, onSelectBuilding }: Buildi
       gl.domElement.style.cursor = "";
     },
     onClick: (e: ThreeEvent<MouseEvent>) => {
-      if (!exploring || e.delta > CLICK_TOLERANCE) return;
+      if (!clickMaySelect() || e.delta > CLICK_TOLERANCE) return;
       e.stopPropagation();
       onSelectBuilding(building);
     },

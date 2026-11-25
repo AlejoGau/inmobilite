@@ -26,6 +26,7 @@ interface InfoPanelProps {
 /** Left glass card on desktop; a collapsible bottom sheet on phones. */
 export function InfoPanel({ label, secondary, stats, showLabels, onToggleLabels, onReplay, onNewSearch }: InfoPanelProps) {
   const titleId = useId();
+  const statsId = useId();
   const detailsId = useId();
   // Phones start collapsed so the scene stays the hero; desktop ignores this.
   const [expanded, setExpanded] = useState(false);
@@ -44,7 +45,7 @@ export function InfoPanel({ label, secondary, stats, showLabels, onToggleLabels,
       <button
         type="button"
         aria-expanded={expanded}
-        aria-controls={detailsId}
+        aria-controls={`${statsId} ${detailsId}`}
         onClick={() => setExpanded((e) => !e)}
         className="mx-auto -mb-1 flex min-h-11 w-full items-center justify-center gap-2 text-[0.8125rem] text-text-muted md:hidden"
       >
@@ -60,19 +61,22 @@ export function InfoPanel({ label, secondary, stats, showLabels, onToggleLabels,
         {secondary && <p className="mt-1 text-sm text-text-muted">{secondary}</p>}
       </header>
 
+      {/* The stats stay outside the scrolling region: their tooltip is absolutely
+          positioned and a scroll container would clip it. */}
+      <dl id={statsId} className={cn("mt-5 grid grid-cols-2 gap-x-4 gap-y-1", !expanded && "max-md:hidden")}>
+        <Stat value={stats.buildings} label={buildingsModelled(stats.buildings)} />
+        <Stat
+          value={stats.estimatedHeights}
+          label={estimatedHeights(stats.estimatedHeights)}
+          help={<InfoTip label="Cómo se calculan las alturas" placement="bottom-end">{ESTIMATED_HEIGHTS_HELP}</InfoTip>}
+        />
+      </dl>
+
+      {/* Scrolls when the viewport is short (a 1366×650 laptop), so it never runs under the buttons. */}
       <div
         id={detailsId}
-        className={cn("min-h-0 overflow-y-auto overscroll-contain md:overflow-visible", expanded ? "block" : "max-md:hidden")}
+        className={cn("min-h-0 overflow-y-auto overscroll-contain [scrollbar-width:thin]", expanded ? "block" : "max-md:hidden")}
       >
-        <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-1">
-          <Stat value={stats.buildings} label={buildingsModelled(stats.buildings)} />
-          <Stat
-            value={stats.estimatedHeights}
-            label={estimatedHeights(stats.estimatedHeights)}
-            help={<InfoTip label="Cómo se calculan las alturas" placement="bottom-end">{ESTIMATED_HEIGHTS_HELP}</InfoTip>}
-          />
-        </dl>
-
         {streets.length > 0 && (
           <section className="mt-6" aria-label="Calles de la zona">
             <h3 className="text-[0.8125rem] font-medium text-text-muted">Calles de la zona</h3>
@@ -104,7 +108,8 @@ export function InfoPanel({ label, secondary, stats, showLabels, onToggleLabels,
 
 function Stat({ value, label, help }: { value: number; label: string; help?: ReactNode }) {
   return (
-    <div className="flex flex-col-reverse">
+    // column-reverse packs from the bottom; justify-end pins the numbers to the top, aligned across stats.
+    <div className="flex flex-col-reverse justify-end">
       <dt className="flex items-center gap-1.5 text-[0.8125rem] leading-snug text-text-muted">
         {label}
         {help}

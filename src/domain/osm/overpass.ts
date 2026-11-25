@@ -29,7 +29,28 @@ export interface OverpassWay {
   tags?: Record<string, string>;
 }
 
-export type OverpassElement = OverpassNode | OverpassWay;
+export interface OverpassMember {
+  type: "node" | "way" | "relation";
+  ref: number;
+  /** "outer" or "inner" in a multipolygon. Old-style multipolygons may leave it empty. */
+  role: string;
+  /** Way members only (`out geom` emits it), in order. Absent when Overpass could not resolve every point. */
+  geometry?: OverpassLatLon[];
+}
+
+/**
+ * A multipolygon relation: the outline of a landmark mapped with holes or a split outer ring (Plaza de
+ * Mayo, Palacio de Aguas Corrientes). The tags live on the relation; its member ways are usually untagged.
+ */
+export interface OverpassRelation {
+  type: "relation";
+  id: number;
+  members: OverpassMember[];
+  bounds?: { minlat: number; minlon: number; maxlat: number; maxlon: number };
+  tags?: Record<string, string>;
+}
+
+export type OverpassElement = OverpassNode | OverpassWay | OverpassRelation;
 
 export interface OverpassResponse {
   version?: number;
@@ -46,19 +67,36 @@ export const DEFAULT_AREA_RADIUS = 300;
  */
 export const BUILDING_SEARCH_RADIUS = 160;
 
+/**
+ * Server-side limit for the query, in seconds. Below the client's overall budget (OVERPASS_BUDGET_MS
+ * in infra), so a mirror never keeps computing an answer nobody waits for. A low value also makes a
+ * busy server more likely to accept the query: Overpass admits queries by their declared timeout.
+ */
+export const OVERPASS_QUERY_TIMEOUT_S = 8;
+
 /** Builds the Overpass QL query for an area. */
 export function buildOverpassQuery(origin: LngLat, radius: number = DEFAULT_AREA_RADIUS): string {
   const lat = origin.lat.toFixed(6);
   const lng = origin.lng.toFixed(6);
   const r = Math.round(radius);
   const rb = Math.round(Math.min(BUILDING_SEARCH_RADIUS, radius));
+  const near = `(around:${r},${lat},${lng});`;
+  const nearBuildings = `(around:${rb},${lat},${lng});`;
+  // Buildings and parks come as closed ways and as multipolygon relations; `out geom` gives the
+  // relations' member geometry, from which the domain assembles their outlines.
+  const multipolygon = `["type"="multipolygon"]`;
+  const parkLeisure = `["leisure"~"^(park|garden|playground)$"]`;
+  const parkLanduse = `["landuse"~"^(grass|recreation_ground)$"]`;
   return (
-    `[out:json][timeout:25];(` +
-    `way["building"](around:${rb},${lat},${lng});` +
-    `way["highway"](around:${r},${lat},${lng});` +
-    `way["leisure"~"^(park|garden|playground)$"](around:${r},${lat},${lng});` +
-    `way["landuse"~"^(grass|recreation_ground)$"](around:${r},${lat},${lng});` +
-    `node["natural"="tree"](around:${r},${lat},${lng});` +
+    `[out:json][timeout:${OVERPASS_QUERY_TIMEOUT_S}];(` +
+    `way["building"]${nearBuildings}` +
+    `relation["building"]${multipolygon}${nearBuildings}` +
+    `way["highway"]${near}` +
+    `way${parkLeisure}${near}` +
+    `relation${parkLeisure}${multipolygon}${near}` +
+    `way${parkLanduse}${near}` +
+    `relation${parkLanduse}${multipolygon}${near}` +
+    `node["natural"="tree"]${near}` +
     `);out geom;`
   );
 }

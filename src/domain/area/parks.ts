@@ -1,11 +1,12 @@
 import { intersect } from "@turf/intersect";
 import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
-import type { OverpassWay } from "../osm/overpass";
+import type { OverpassRelation, OverpassWay } from "../osm/overpass";
 import type { Projection } from "../geo/projection";
 import type { Park, Ring, Vec2 } from "../types";
 import { normalizeRing, polygonArea } from "../geo/polygon";
 import { length, roundVec } from "../geo/vec";
-import { isClosedWay, projectWay, tagsOf, wayId } from "./osmElements";
+import { isMultipolygon, outerRings } from "./multipolygons";
+import { isClosedWay, projectWay, refId, tagsOf, wayId, type Tags } from "./osmElements";
 import { ROAD_CLIP_MARGIN } from "./roads";
 
 const PARK_LEISURE = new Set(["park", "garden", "playground"]);
@@ -21,29 +22,38 @@ export function isParkTags(tags: Record<string, string>): boolean {
 
 /**
  * Parks clipped to the same disc as the roads, so a big park does not spill
- * green past the edge of the scene.
+ * green past the edge of the scene. Closed ways first, then multipolygon
+ * relations (Plaza de Mayo, Plaza San Martín are mapped that way).
  */
-export function extractParks(ways: OverpassWay[], projection: Projection, radius: number): Park[] {
+export function extractParks(ways: OverpassWay[], projection: Projection, radius: number, relations: OverpassRelation[]): Park[] {
   const clipRadius = radius + ROAD_CLIP_MARGIN;
   const clipCircle = circleRing(clipRadius);
   const parks: Park[] = [];
 
-  for (const way of ways) {
-    const tags = tagsOf(way);
-    if (!isParkTags(tags) || !isClosedWay(way)) continue;
-    const ring = normalizeRing(projectWay(way, projection));
-    if (!ring) continue;
-
-    const pieces = ring.every((p) => length(p) <= clipRadius) ? [ring] : clipToCircle(ring, clipCircle);
+  /** One Park per piece left after clipping; when there are several, each id gets an index. */
+  const addPark = (id: string, tags: Tags, rings: Ring[]): void => {
+    const pieces = rings.flatMap((ring) => (ring.every((p) => length(p) <= clipRadius) ? [ring] : clipToCircle(ring, clipCircle)));
     const valid = pieces.filter((piece) => polygonArea(piece) >= MIN_PARK_AREA);
     valid.forEach((piece, index) => {
-      const park: Park = {
-        id: valid.length === 1 ? wayId(way) : `${wayId(way)}:${index}`,
-        polygon: piece.map(roundVec),
-      };
+      const park: Park = { id: valid.length === 1 ? id : `${id}:${index}`, polygon: piece.map(roundVec) };
       if (tags.name) park.name = tags.name;
       parks.push(park);
     });
+  };
+
+  const drawnWays = new Set<number>();
+  for (const way of ways) {
+    const tags = tagsOf(way);
+    if (!isParkTags(tags) || !isClosedWay(way)) continue;
+    drawnWays.add(way.id);
+    const ring = normalizeRing(projectWay(way, projection));
+    if (ring) addPark(wayId(way), tags, [ring]);
+  }
+  for (const relation of relations) {
+    const tags = tagsOf(relation);
+    if (isParkTags(tags) && isMultipolygon(relation)) {
+      addPark(refId(relation), tags, outerRings(relation, projection, drawnWays));
+    }
   }
   return parks;
 }

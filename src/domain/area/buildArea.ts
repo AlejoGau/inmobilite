@@ -24,11 +24,11 @@ export interface BuildAreaInput {
 export function buildArea({ origin, osm, radius = DEFAULT_AREA_RADIUS }: BuildAreaInput): AreaModel {
   const projection = createProjection(origin);
   const seed = seedFromOrigin(origin);
-  const { ways, nodes } = sortElements(osm);
+  const { ways, nodes, relations } = sortElements(osm);
 
   const { roads, sidewalkIds } = extractRoads(ways, projection, radius);
-  const buildings = extractBuildings(ways, projection);
-  const parks = extractParks(ways, projection, radius);
+  const buildings = extractBuildings(ways, projection, relations);
+  const parks = extractParks(ways, projection, radius, relations);
   const trees = placeTrees({ seed, radius, projection, nodes, roads, sidewalkIds, buildings, parks });
   const streets = rankStreets(roads);
 

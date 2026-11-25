@@ -1,7 +1,7 @@
 "use client";
 
 import { useFrame, useThree } from "@react-three/fiber";
-import { useLayoutEffect, useMemo, useRef, type RefObject } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { PerspectiveCamera, type Camera } from "three";
 import { createEmptyFrame, type DirectorFrame } from "../director/director";
 import { useSceneRuntime } from "./SceneRuntime";
@@ -15,8 +15,8 @@ const DRIVER_PRIORITY = -2;
 export interface SceneDriverProps {
   /** Where the play starts, in seconds (the end of the intro to skip it). */
   startAt: number;
-  /** Set to true to jump to the end of the intro (a click during the intro, reduced motion turned on later). */
-  skipRequested: RefObject<boolean>;
+  /** True to jump to the end of the intro (a press during the intro, reduced motion turned on later). */
+  isSkipRequested: () => boolean;
   /** Called once, from the render loop, when the intro reaches its end. */
   onIntroEnd: () => void;
 }
@@ -38,7 +38,7 @@ function applyCamera(camera: Camera, frame: DirectorFrame): void {
  *
  * Remount it (React key) to replay the intro from its start.
  */
-export function SceneDriver({ startAt, skipRequested, onIntroEnd }: SceneDriverProps) {
+export function SceneDriver({ startAt, isSkipRequested, onIntroEnd }: SceneDriverProps) {
   const { director, bus, exploring } = useSceneRuntime();
   const camera = useThree((s) => s.camera);
   const frame = useMemo(() => createEmptyFrame(), []);
@@ -61,7 +61,7 @@ export function SceneDriver({ startAt, skipRequested, onIntroEnd }: SceneDriverP
 
   useFrame((_, delta) => {
     let t = time.current + Math.min(Math.max(delta, 0), MAX_STEP);
-    if (skipRequested.current && t < director.duration) t = director.duration;
+    if (t < director.duration && isSkipRequested()) t = director.duration;
     time.current = t;
 
     director.sampleInto(t, frame);

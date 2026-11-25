@@ -8,7 +8,7 @@ import { LAYERS, PALETTE } from "../config/palette";
 import { buildTreeGeometry } from "../geometry/treeGeometry";
 import { applyGroundFx, createGroundFxUniforms } from "../materials/groundFx";
 import { useDirectorFrame, useSceneRuntime } from "../runtime/SceneRuntime";
-import { useDisposable } from "../runtime/useDisposable";
+import { useDisposeOnChange } from "../runtime/useDisposable";
 
 interface TreeLayout {
   x: number;
@@ -38,7 +38,8 @@ export function Trees({ area }: { area: AreaModel }) {
     }));
   }, [area]);
 
-  const geometry = useDisposable(() => buildTreeGeometry(), []);
+  const geometry = useMemo(() => buildTreeGeometry(), []);
+  useDisposeOnChange(geometry);
   const fx = useMemo(() => {
     const uniforms = createGroundFxUniforms({
       fadeStart: area.radius * 0.6,
@@ -52,10 +53,11 @@ export function Trees({ area }: { area: AreaModel }) {
     uniforms.uRevealRadius.value = 1e6;
     return uniforms;
   }, [area]);
-  const material = useDisposable(() => {
-    const m = new MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 });
-    return applyGroundFx(m, fx, "trees");
-  }, [fx]);
+  const material = useMemo(
+    () => applyGroundFx(new MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }), fx, "trees"),
+    [fx],
+  );
+  useDisposeOnChange(material);
 
   // Seeded per-instance tint: some greener, some yellower, some darker.
   useLayoutEffect(() => {

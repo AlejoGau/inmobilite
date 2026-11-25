@@ -1,3 +1,4 @@
+import { gsap } from "gsap";
 import { describe, expect, it } from "vitest";
 import { sampleArea } from "../testing/sampleArea";
 import { HERO_SPEC, INTRO_START } from "./cameraPose";
@@ -102,6 +103,15 @@ describe("director", () => {
     area.buildings.forEach((_, i) => expect(director.buildingRise(i, end)).toBe(1));
     area.trees.forEach((_, i) => expect(director.treePop(i, end)).toBe(1));
     director.dispose();
+  });
+
+  it("stays off GSAP's global clock, so nothing but sample() moves it and nothing leaks", () => {
+    const before = gsap.globalTimeline.getChildren(false, true, true).length;
+    const director = createDirector(sampleArea());
+    expect(gsap.globalTimeline.getChildren(false, true, true).length).toBe(before);
+    const a = director.sample(3);
+    gsap.globalTimeline.time(gsap.globalTimeline.time() + 5);
+    expect(director.sample(3)).toEqual(a);
   });
 
   it("is deterministic per area: same origin, same hero shot", () => {

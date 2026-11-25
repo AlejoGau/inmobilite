@@ -156,6 +156,25 @@ describe("experienceReducer", () => {
     expect(experienceReducer(ready, { type: "flightEnded", searchId: 1 }).phase).toBe("materializing");
   });
 
+  it("a landing while the error shows is kept, so a later retry materializes", () => {
+    // The globe keeps flying under the toast and lands once; it never announces that landing again.
+    const landedInError = run([pick(), { type: "areaFailed", requestId: 1, message: "Sin conexión" }, { type: "flightEnded", searchId: 1 }]);
+    expect(landedInError.phase).toBe("error");
+    expect(landedInError.errorMessage).toBe("Sin conexión");
+    expect(landedInError.flightDone).toBe(true);
+
+    const retrying = experienceReducer(landedInError, { type: "retry" });
+    expect(retrying.flightDone).toBe(true);
+    const ready = experienceReducer(retrying, { type: "areaLoaded", requestId: 2, area: makeArea() });
+    expect(ready.phase).toBe("materializing");
+    expect(isStageVisible(ready)).toBe(true);
+  });
+
+  it("a landing after a reset is still ignored", () => {
+    const abandoned = run([pick(), { type: "areaFailed", requestId: 1, message: "x" }, { type: "reset" }]);
+    expect(experienceReducer(abandoned, { type: "flightEnded", searchId: 1 })).toBe(abandoned);
+  });
+
   it("reset goes back to idle, keeps the labels preference and keeps ids monotonic", () => {
     const state = run([pick(), { type: "toggleLabels" }, { type: "areaFailed", requestId: 1, message: "x" }, { type: "reset" }]);
     expect(state.phase).toBe("idle");

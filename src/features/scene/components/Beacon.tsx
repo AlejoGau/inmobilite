@@ -1,18 +1,20 @@
 "use client";
 
+/* eslint-disable react-hooks/immutability -- three.js objects (uniforms, meshes, renderer) are mutated imperatively outside render, by design. */
+
 import { useMemo, useRef } from "react";
 import { CylinderGeometry, PlaneGeometry, type Group } from "three";
 import { LAYERS } from "../config/palette";
 import { BEACON_SPEC, createBeaconUniforms, createColumnMaterial, createRingsMaterial } from "../materials/beaconMaterials";
 import { useDirectorFrame } from "../runtime/SceneRuntime";
-import { useDisposable } from "../runtime/useDisposable";
+import { disposableGroup, useDisposeOnChange } from "../runtime/useDisposable";
 
 /** Teal light column and pulsing rings marking the searched corner. */
 export function Beacon() {
   const uniforms = useMemo(() => createBeaconUniforms(), []);
   const group = useRef<Group>(null);
 
-  const geometry = useDisposable(() => {
+  const geometry = useMemo(() => {
     const s = BEACON_SPEC;
     const column = new CylinderGeometry(s.columnRadius, s.columnRadius, s.columnHeight, 32, 1, true);
     column.translate(0, s.columnHeight / 2, 0);
@@ -21,18 +23,20 @@ export function Beacon() {
     const rings = new PlaneGeometry(s.groundExtent * 2, s.groundExtent * 2);
     // Laid flat; the rings shader reads the ground-plane coordinates (x, z).
     rings.rotateX(-Math.PI / 2);
-    return Object.assign([column, core, rings], { column, core, rings });
+    return disposableGroup({ column, core, rings });
   }, []);
+  useDisposeOnChange(geometry);
 
-  const materials = useDisposable(
-    () => {
-      const glow = createColumnMaterial(uniforms, 0.55);
-      const core = createColumnMaterial(uniforms, 1.6);
-      const rings = createRingsMaterial(uniforms);
-      return Object.assign([glow, core, rings], { glow, core, rings });
-    },
+  const materials = useMemo(
+    () =>
+      disposableGroup({
+        glow: createColumnMaterial(uniforms, 0.55),
+        core: createColumnMaterial(uniforms, 1.6),
+        rings: createRingsMaterial(uniforms),
+      }),
     [uniforms],
   );
+  useDisposeOnChange(materials);
 
   useDirectorFrame((frame) => {
     uniforms.uIntensity.value = frame.beacon;

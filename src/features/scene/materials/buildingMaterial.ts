@@ -12,8 +12,9 @@ export const FACADE_SPEC = {
   maxFloorHeight: 4.2,
   /** Share of lit windows at dusk, per building. */
   litRatio: [0.35, 0.55] as const,
-  windowGlow: 1.9,
-  storefrontGlow: 1.1,
+  /** Emissive strength of a lit window: the brighter ones cross the bloom threshold, the dimmer ones do not. */
+  windowGlow: 3.0,
+  storefrontGlow: 2.2,
 } as const;
 
 export interface BuildingUniforms {
@@ -140,7 +141,7 @@ const FRAGMENT_MAIN = /* glsl */ `
   // Soft light line riding on top of the building while it rises.
   float band = 0.6 / max(uScaleY, 0.04);
   float rim = smoothstep(uRimHeight - band, uRimHeight, h) * (1.0 - step(uRimHeight + 0.01, h));
-  totalEmissiveRadiance += uAccent * (rim * uEdgeGlow * 2.4);
+  totalEmissiveRadiance += uAccent * (rim * uEdgeGlow * 4.0);
 
   // Hover and selection: a teal fresnel rim plus a faint tint.
   float facing = clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);

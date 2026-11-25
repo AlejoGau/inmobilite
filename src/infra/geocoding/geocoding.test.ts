@@ -74,6 +74,25 @@ describe("format", () => {
     expect(titleCase("O'HIGGINS")).toBe("O'Higgins");
   });
 
+  // Raw names recorded from USIG (2026-11-24): "SURNAME, GIVEN, TITLE", plus the diagonals' popular name.
+  it("puts a USIG title before the given name and drops the diagonal's popular name", () => {
+    expect(formatStreetName("ROCA, JULIO A., PRESIDENTE DIAGONAL SUR AV.")).toBe("Av. Presidente Julio A. Roca");
+    expect(formatStreetName("SAENZ PEÑA, ROQUE, PRES. DIAGONAL NORTE AV.")).toBe("Av. Pres. Roque Saenz Peña");
+    expect(joinIntersection(formatStreetName("ROCA, JULIO A., PRESIDENTE DIAGONAL SUR AV."), formatStreetName("BOLIVAR"))).toBe(
+      "Av. Presidente Julio A. Roca y Bolivar",
+    );
+  });
+
+  it("moves an article that USIG writes last back to the front", () => {
+    expect(formatStreetName("BARCO CENTENERA DEL")).toBe("Del Barco Centenera");
+    expect(formatStreetName("BARCO CENTENERA DEL AV.")).toBe("Av. Del Barco Centenera");
+    expect(formatStreetName("ALVEAR, MARCELO T. DE AV.")).toBe("Av. Marcelo T. de Alvear");
+  });
+
+  it("does not mistake Object.prototype keys for street types", () => {
+    expect(formatStreetName("CONSTRUCTOR BENITEZ")).toBe("Constructor Benitez");
+  });
+
   it("uses 'e' before an i sound", () => {
     expect(joinIntersection("Corrientes", "Independencia")).toBe("Corrientes e Independencia");
     expect(joinIntersection("Av. Acoyte", "Av. Rivadavia")).toBe("Av. Acoyte y Av. Rivadavia");

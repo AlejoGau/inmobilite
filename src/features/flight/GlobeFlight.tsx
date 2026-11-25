@@ -3,6 +3,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { Map as MapLibreMap, MapLibreEvent } from "maplibre-gl";
+import { HANDOFF_CAMERA } from "@/domain/handoffCamera";
 import { cn } from "@/ui/cn";
 import { usePrefersReducedMotion } from "@/ui/usePrefersReducedMotion";
 import { applyGlobePalette } from "./globePalette";
@@ -69,7 +70,9 @@ export function GlobeFlight({ target, onArrive, className }: GlobeFlightProps) {
         const container = containerRef.current;
         if (disposed || !container) return;
         const start = initialTarget.current;
-        const camera = start ? arrivalCamera(start.lng, start.lat) : homeCamera({ width: container.clientWidth, height: container.clientHeight });
+        const camera = start
+          ? arrivalCamera(start.lng, start.lat, container.clientHeight)
+          : homeCamera({ width: container.clientWidth, height: container.clientHeight });
         try {
           instance = new Map({
             container,
@@ -80,11 +83,14 @@ export function GlobeFlight({ target, onArrive, className }: GlobeFlightProps) {
             fadeDuration: 200,
           });
         } catch {
-          // No WebGL2: the experience still works, the stage just appears without a flight.
+          // No WebGL2: arrive at once, without a globe. The 3D stage needs WebGL2 too, so it
+          // will show its fallback (StageLayer) while the panel and the search keep working.
           setFailed(true);
           return;
         }
         const created = instance;
+        // Pinned rather than relying on MapLibre's default: the 3D intro uses the same value.
+        created.setVerticalFieldOfView(HANDOFF_CAMERA.fovDeg);
         created.on("style.load", () => {
           created.setProjection({ type: "globe" });
           created.setSky(SKY);
@@ -115,21 +121,38 @@ export function GlobeFlight({ target, onArrive, className }: GlobeFlightProps) {
 
     if (key === null) return goHome(map, viewport, reducedMotion);
 
+    // The arrival zoom depends on the viewport height (camera.ts). A flight lands on
+    // the zoom computed at take-off, so the pose is re-applied from the live height on
+    // landing and on every resize after it (a phone rotated mid-flight or while the
+    // area loads): the crossfade into the 3D intro must keep its scale. Its own
+    // moveend carries no flightKey, so it never counts as an arrival.
+    const holdArrival = () => map.jumpTo(arrivalCamera(lng, lat, container.clientHeight));
+    const onResize = () => {
+      if (!map.isMoving()) holdArrival();
+    };
+
     if (mode === "jump" || reducedMotion) {
       map.stop();
-      map.jumpTo(arrivalCamera(lng, lat));
+      holdArrival();
+      map.on("resize", onResize);
       arrive(key);
-      return;
+      return () => {
+        map.off("resize", onResize);
+      };
     }
 
     const onMoveEnd = (event: MapLibreEvent) => {
-      if (flightKeyOf(event) === key) arrive(key);
+      if (flightKeyOf(event) !== key) return;
+      holdArrival();
+      map.on("resize", onResize);
+      arrive(key);
     };
     // Listen before flying: flyTo first stops the previous flight, whose moveend carries the old key.
     map.on("moveend", onMoveEnd);
-    map.flyTo(flightTo(lng, lat), { flightKey: key });
+    map.flyTo(flightTo(lng, lat, viewport.height), { flightKey: key });
     return () => {
       map.off("moveend", onMoveEnd);
+      map.off("resize", onResize);
     };
   }, [map, failed, key, lng, lat, mode, reducedMotion]);
 

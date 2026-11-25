@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import type { NextRequest } from "next/server";
 import { errorResult, toResponse } from "@/infra/api/apiResult";
 import { areaHandler } from "@/infra/api/areaHandler";
@@ -12,6 +13,8 @@ export async function GET(request: NextRequest): Promise<Response> {
   try {
     return toResponse(await areaHandler(params.get("lat"), params.get("lng")));
   } catch (error) {
+    // Next's own control-flow errors (the prerender bail-out on searchParams) must go through.
+    unstable_rethrow(error);
     console.error("[api/area]", error);
     return toResponse(errorResult(500, "Error inesperado al armar la zona."));
   }

@@ -3,7 +3,8 @@
 import { CameraControls } from "@react-three/drei";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { Box3, Sphere, Vector3 } from "three";
-import type { Building } from "@/domain/types";
+import type { AreaModel, Building } from "@/domain/types";
+import { ringCentroid } from "../geometry/polygon2d";
 import { useSceneRuntime } from "./SceneRuntime";
 
 export const EXPLORE_LIMITS = {
@@ -12,8 +13,12 @@ export const EXPLORE_LIMITS = {
   minPolarAngle: 0.08,
   /** About 77° from vertical: low, cinematic views, but never under the ground. */
   maxPolarAngle: 1.35,
-  /** The orbit target stays over the modelled area. */
+  /** The orbit target stays over the modelled area: the smallest half-size of its box, as a share of the radius. */
   targetBoundsFactor: 0.55,
+  /** The lowest top of that box (m); a tall building raises it. */
+  targetCeiling: 60,
+  /** Room (m) the box keeps around every building's centre, so each one can be framed. */
+  targetMargin: 5,
   smoothTime: 0.32,
   draggingSmoothTime: 0.12,
 } as const;
@@ -24,8 +29,33 @@ export interface BuildingFocus {
   radius: number;
 }
 
+/** What the camera frames for a selected building: the middle of its volume, and a sphere around it. */
+export function focusFor(building: Building): BuildingFocus {
+  const [x, north] = ringCentroid(building.footprint);
+  const radius = Math.max(...building.footprint.map(([px, py]) => Math.hypot(px - x, py - north)));
+  return { building, centre: [x, building.height / 2, -north], radius: Math.hypot(radius, building.height / 2) };
+}
+
+/**
+ * The box the orbit target stays in: the core of the area, grown so every
+ * building's focus centre fits. fitToSphere clamps its target to this box,
+ * and where OSM is sparse the 20 closest buildings reach past the core, so a
+ * fixed box would frame its own edge instead of the selected building.
+ */
+export function exploreTargetBounds(area: AreaModel): Box3 {
+  let half = area.radius * EXPLORE_LIMITS.targetBoundsFactor;
+  let top: number = EXPLORE_LIMITS.targetCeiling;
+  for (const building of area.buildings) {
+    const [x, y, z] = focusFor(building).centre;
+    half = Math.max(half, Math.abs(x) + EXPLORE_LIMITS.targetMargin, Math.abs(z) + EXPLORE_LIMITS.targetMargin);
+    top = Math.max(top, y + EXPLORE_LIMITS.targetMargin);
+  }
+  return new Box3(new Vector3(-half, 0, -half), new Vector3(half, top, half));
+}
+
 export interface ExploreControlsProps {
-  areaRadius: number;
+  /** The box the orbit target stays in (see exploreTargetBounds). */
+  targetBounds: Box3;
   /** The selected building to frame, or null. */
   focus: BuildingFocus | null;
   /** Lower the DPR while moving (drei regress). Only on the high tier. */
@@ -36,7 +66,7 @@ export interface ExploreControlsProps {
  * Free orbit after the intro. Mounted only once the intro is over, and it
  * starts EXACTLY on the director's final pose, so the hand-over has no jump.
  */
-export function ExploreControls({ areaRadius, focus, regress }: ExploreControlsProps) {
+export function ExploreControls({ targetBounds, focus, regress }: ExploreControlsProps) {
   const { director } = useSceneRuntime();
   const controls = useRef<CameraControls>(null);
 
@@ -46,9 +76,13 @@ export function ExploreControls({ areaRadius, focus, regress }: ExploreControlsP
     const { position, target } = director.sample(director.duration).camera;
     // No transition: the camera already sits here, this only syncs the controls' internal state.
     void c.setLookAt(position[0], position[1], position[2], target[0], target[1], target[2], false);
-    const half = areaRadius * EXPLORE_LIMITS.targetBoundsFactor;
-    c.setBoundary(new Box3(new Vector3(-half, 0, -half), new Vector3(half, 60, half)));
-  }, [director, areaRadius]);
+    c.setBoundary(targetBounds);
+    // Settle that sync now, while nobody listens: drei subscribes to the controls
+    // in a passive effect, after this one. Left for the first frame, the no-op
+    // sync would emit an 'update', and drei would regress (DPR down a quarter
+    // for 200 ms) on a camera that never moved.
+    c.update(0);
+  }, [director, targetBounds]);
 
   useEffect(() => {
     const c = controls.current;

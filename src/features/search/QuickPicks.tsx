@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import type { GeocodeResult } from "@/domain/types";
 import { cn } from "@/ui/cn";
 import { fetchGeocode, isAbortError } from "./geocodeClient";
 import { QUICK_PICKS } from "./quickPickOptions";
 
+export interface QuickPicksHandle {
+  /** Drops the chip request in flight: the user chose something else. */
+  cancel(): void;
+}
+
 interface QuickPicksProps {
+  ref?: Ref<QuickPicksHandle>;
   onStart: () => void;
   onPick: (result: GeocodeResult) => void;
   /** No confident match: hand the text to the search box so the user can choose. */
@@ -14,11 +20,23 @@ interface QuickPicksProps {
   className?: string;
 }
 
-export function QuickPicks({ onStart, onPick, onUnresolved, className }: QuickPicksProps) {
+export function QuickPicks({ ref, onStart, onPick, onUnresolved, className }: QuickPicksProps) {
   const [pending, setPending] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
 
   useEffect(() => () => controller.current?.abort(), []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      cancel() {
+        controller.current?.abort();
+        controller.current = null;
+        setPending(null);
+      },
+    }),
+    [],
+  );
 
   async function resolve(query: string) {
     onStart();
@@ -28,10 +46,12 @@ export function QuickPicks({ onStart, onPick, onUnresolved, className }: QuickPi
     setPending(query);
     try {
       const [first] = await fetchGeocode(query, current.signal);
+      // Superseded while in flight (another chip, or a pick from the list): a late answer must not win.
+      if (controller.current !== current) return;
       if (first) onPick(first);
       else onUnresolved(query);
     } catch (error) {
-      if (!isAbortError(error)) onUnresolved(query);
+      if (controller.current === current && !isAbortError(error)) onUnresolved(query);
     } finally {
       if (controller.current === current) setPending(null);
     }

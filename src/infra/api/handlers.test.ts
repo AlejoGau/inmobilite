@@ -88,10 +88,14 @@ describe("area handler", () => {
       loadFallback: loadOfflineFallback,
       cache: new LruCache(10),
     });
-    const near = await handler("-34.6200", "-58.4380"); // ~230 m away
+    const near = await handler("-34.617078", "-58.437091"); // Acoyte y Yerbal, ~148 m away
     expect(near.status).toBe(200);
     expect(near.headers["X-Area-Source"]).toBe("fixture");
     expect((near.body as AreaModel).stats.streets.length).toBeGreaterThan(3);
+
+    // ~375 m away: the fixture would cut its scene on one side, so it is not served as that corner.
+    const campichuelo = await handler("-34.616703", "-58.432864");
+    expect(campichuelo.status).toBe(503);
 
     const far = await handler("-34.5600", "-58.4550"); // Belgrano
     expect(far.status).toBe(503);

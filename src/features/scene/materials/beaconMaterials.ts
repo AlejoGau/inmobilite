@@ -66,7 +66,7 @@ export function createColumnMaterial(uniforms: BeaconUniforms, strength: number)
 export function createRingsMaterial(uniforms: BeaconUniforms): ShaderMaterial {
   const s = BEACON_SPEC;
   return new ShaderMaterial({
-    uniforms,
+    uniforms: { ...uniforms },
     vertexShader: /* glsl */ `
       varying vec2 vLocal;
       void main() {

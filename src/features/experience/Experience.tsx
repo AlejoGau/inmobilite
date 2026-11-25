@@ -15,7 +15,7 @@ import { createInitialState, experienceReducer, isStageVisible, type Destination
 import { Hero } from "./Hero";
 import { InfoPanel } from "./InfoPanel";
 import { StageLayer } from "./StageLayer";
-import { prefetchScene } from "./stageLoader";
+import { prefetchScene, prewarmStage } from "./stageLoader";
 import { StatusLine } from "./StatusLine";
 import { TopBar } from "./TopBar";
 
@@ -48,7 +48,10 @@ export function Experience() {
     if (areaStatus !== "loading" || !destination) return;
     const controller = new AbortController();
     fetchArea(destination.lat, destination.lng, controller.signal)
-      .then((loaded) => dispatch({ type: "areaLoaded", requestId, area: loaded }))
+      .then((loaded) => {
+        dispatch({ type: "areaLoaded", requestId, area: loaded });
+        prewarmStage(loaded);
+      })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         const message = error instanceof AreaRequestError ? error.message : GENERIC_AREA_ERROR;

@@ -106,7 +106,7 @@ function keyOf(origin: LngLat): string {
 
 export const areaHandler: AreaHandler = createAreaHandler({
   // No request signal on purpose: the work is shared between requests and its result is cached,
-  // so one client leaving must not cancel it for the others. Mirror timeouts bound it.
+  // so one client leaving must not cancel it for the others. fetchOverpass's overall budget bounds it.
   fetchOverpass: (query) => fetchOverpass(query),
   loadFallback: loadOfflineFallback,
   cache: new LruCache<AreaEntry>(CACHE_CAPACITY),

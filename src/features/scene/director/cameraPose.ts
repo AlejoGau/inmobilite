@@ -1,3 +1,4 @@
+import { HANDOFF_CAMERA, handoffCameraDistance } from "@/domain/handoffCamera";
 import { mulberry32, randomBetween } from "@/domain/seed";
 import type { AreaModel } from "@/domain/types";
 
@@ -17,16 +18,11 @@ export interface OrbitPose {
 }
 
 /**
- * Where the intro starts. Matches the end of the MapLibre flight: centred on
- * the origin, north up, slightly pitched, about 380 m above the ground.
- * MapLibre's default vertical field of view is 36.87°.
+ * Where the intro starts: exactly where the MapLibre flight ends (centred on
+ * the origin, north up, slightly pitched, 380 m above the ground). Shared
+ * with the flight through the domain; see domain/handoffCamera.ts.
  */
-export const INTRO_START = {
-  altitude: 380,
-  pitchDeg: 12,
-  bearingDeg: 0,
-  fovDeg: 36.87,
-} as const;
+export const INTRO_START = HANDOFF_CAMERA;
 
 export const HERO_SPEC = {
   /** Tilt from straight down; 50° means looking 40° below the horizon. */
@@ -36,10 +32,18 @@ export const HERO_SPEC = {
   bearingJitterDeg: 8,
   fovDeg: 38,
   minDistance: 110,
-  maxDistance: 230,
+  maxDistance: 150,
+  /**
+   * Share of the buildings (closest first) the hero shot must frame. The 20
+   * closest buildings can spread over 150+ m; framing every one of them would
+   * push the camera to ~300 m and make the corner tiny, so the shot frames
+   * the core and lets the outer ones run off the edges.
+   */
+  framingShare: 0.6,
+  minFramed: 3,
   /** Framing margin around the buildings. */
-  padding: 1.12,
-  /** How far the target moves from the corner towards the buildings' centre. */
+  padding: 1.08,
+  /** How far the target moves from the corner towards the framed buildings' centre. */
   targetPull: 0.45,
   targetHeight: 4,
   /** Aspect used for framing when the viewport is unknown. */
@@ -52,7 +56,7 @@ export function startPose(): OrbitPose {
   return {
     bearingDeg: INTRO_START.bearingDeg,
     polarDeg: INTRO_START.pitchDeg,
-    distance: INTRO_START.altitude / Math.cos(INTRO_START.pitchDeg * DEG),
+    distance: handoffCameraDistance(),
     target: [0, 0, 0],
     fovDeg: INTRO_START.fovDeg,
   };
@@ -70,10 +74,12 @@ export function orbitPosition(bearingDeg: number, polarDeg: number, distance: nu
   return out;
 }
 
-/** Building corners at ground and roof level, in three space. */
-function buildingPoints(area: AreaModel): Vec3[] {
+/** Corners, at ground and roof level, of the buildings the hero shot frames (three space). */
+function framedBuildingPoints(area: AreaModel): Vec3[] {
+  const sorted = [...area.buildings].sort((a, b) => a.distance - b.distance);
+  const count = Math.max(HERO_SPEC.minFramed, Math.ceil(sorted.length * HERO_SPEC.framingShare));
   const points: Vec3[] = [];
-  for (const b of area.buildings) {
+  for (const b of sorted.slice(0, count)) {
     for (const [x, y] of b.footprint) {
       points.push([x, 0, -y], [x, b.height, -y]);
     }
@@ -112,13 +118,13 @@ export function fitDistance(points: Vec3[], target: Vec3, bearingDeg: number, po
 
 /**
  * The 3/4 hero view at the end of the intro: about 40° down onto the corner,
- * far enough to frame every modelled building, with a small seeded variation
- * of the bearing so two corners do not end on the exact same shot.
+ * 110-150 m away, framing the buildings around it, with a small seeded
+ * variation of the bearing so two corners do not end on the exact same shot.
  */
 export function heroPose(area: AreaModel, aspect: number = HERO_SPEC.defaultAspect): OrbitPose {
   const rng = mulberry32(area.seed ^ 0x2545f491);
   const bearingDeg = HERO_SPEC.bearingDeg + randomBetween(rng, -HERO_SPEC.bearingJitterDeg, HERO_SPEC.bearingJitterDeg);
-  const points = buildingPoints(area);
+  const points = framedBuildingPoints(area);
 
   let target: Vec3 = [0, HERO_SPEC.targetHeight, 0];
   if (points.length) {

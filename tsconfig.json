@@ -19,7 +19,6 @@
       }
     ],
     "paths": {
-      "@/features/scene": ["./src/dev/scene-preview/index.tsx"],
       "@/*": ["./src/*"]
     }
   },

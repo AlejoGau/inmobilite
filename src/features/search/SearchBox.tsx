@@ -5,7 +5,7 @@ import type { GeocodeResult } from "@/domain/types";
 import { cn } from "@/ui/cn";
 import { CloseIcon, SearchIcon } from "@/ui/icons";
 import { KindIcon, KIND_LABELS } from "./KindIcon";
-import { QuickPicks } from "./QuickPicks";
+import { QuickPicks, type QuickPicksHandle } from "./QuickPicks";
 import { useGeocodeSearch } from "./useGeocodeSearch";
 import { useSlashShortcut } from "./useSlashShortcut";
 
@@ -38,6 +38,7 @@ export function SearchBox({
   const listboxId = `${uid}-listbox`;
   const statusId = `${uid}-status`;
   const inputRef = useRef<HTMLInputElement>(null);
+  const quickPicks = useRef<QuickPicksHandle>(null);
   const announcedFirstInput = useRef(false);
 
   const [query, setQuery] = useState("");
@@ -65,6 +66,8 @@ export function SearchBox({
   }
 
   function pick(result: GeocodeResult) {
+    // The last choice wins: a chip answer still in flight must not override it.
+    quickPicks.current?.cancel();
     setQuery("");
     setOpen(false);
     setHighlight(null);
@@ -211,6 +214,7 @@ export function SearchBox({
 
       {hero && (
         <QuickPicks
+          ref={quickPicks}
           className="mt-5"
           onStart={notifyFirstInput}
           onPick={pick}

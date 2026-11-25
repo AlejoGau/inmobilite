@@ -1,4 +1,5 @@
 import type { FlyToOptions, JumpToOptions, SkySpecification } from "maplibre-gl";
+import { HANDOFF_CAMERA, handoffCameraDistance } from "@/domain/handoffCamera";
 
 export const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/dark";
 
@@ -12,8 +13,21 @@ const PHONE_MAX_WIDTH = 640;
 /** Degrees of longitude per second for the idle spin: slow enough to read as ambient. */
 export const ROTATION_DEG_PER_SECOND = 2.4;
 
-/** Arrival camera: close, pitched and slightly turned, matching where the 3D stage opens. */
-export const ARRIVAL = { zoom: 16.8, pitch: 55, bearing: -15 } as const;
+const EARTH_CIRCUMFERENCE_M = 40_075_016.686;
+/** MapLibre's world is 512 px wide at zoom 0. */
+const MAPLIBRE_TILE_SIZE = 512;
+
+/**
+ * The zoom at which MapLibre's camera sits `distanceM` meters from the map
+ * centre. MapLibre places the camera `0.5 · height / tan(fov / 2)` CSS pixels
+ * from the centre, so for a given distance in meters the zoom depends on the
+ * latitude and on the viewport height.
+ */
+export function zoomForCameraDistance(distanceM: number, latDeg: number, viewportHeightPx: number, fovDeg: number): number {
+  const cameraToCenterPx = (0.5 * viewportHeightPx) / Math.tan((fovDeg * Math.PI) / 360);
+  const metersPerPixelAtZoom0 = (EARTH_CIRCUMFERENCE_M * Math.cos((latDeg * Math.PI) / 180)) / MAPLIBRE_TILE_SIZE;
+  return Math.log2((cameraToCenterPx * metersPerPixelAtZoom0) / distanceM);
+}
 
 const FLIGHT = { duration: 5000, curve: 1.6 } as const;
 const HOME_FLIGHT = { duration: 3400, curve: 1.4 } as const;
@@ -48,13 +62,23 @@ export function homeCamera(viewport: Viewport): JumpToOptions {
   };
 }
 
-export function arrivalCamera(lng: number, lat: number): JumpToOptions {
-  return { center: [lng, lat], ...ARRIVAL, padding: { top: 0, bottom: 0, left: 0, right: 0 } };
+/**
+ * Arrival camera: exactly the pose where the 3D intro starts (domain/handoffCamera.ts),
+ * so the crossfade from the map into the scene does not jump.
+ */
+export function arrivalCamera(lng: number, lat: number, viewportHeightPx: number): JumpToOptions {
+  return {
+    center: [lng, lat],
+    zoom: zoomForCameraDistance(handoffCameraDistance(), lat, viewportHeightPx, HANDOFF_CAMERA.fovDeg),
+    pitch: HANDOFF_CAMERA.pitchDeg,
+    bearing: HANDOFF_CAMERA.bearingDeg,
+    padding: { top: 0, bottom: 0, left: 0, right: 0 },
+  };
 }
 
-export function flightTo(lng: number, lat: number): FlyToOptions {
+export function flightTo(lng: number, lat: number, viewportHeightPx: number): FlyToOptions {
   // `essential` keeps MapLibre from skipping it: reduced motion is handled by the caller with a jump.
-  return { ...arrivalCamera(lng, lat), ...FLIGHT, essential: true };
+  return { ...arrivalCamera(lng, lat, viewportHeightPx), ...FLIGHT, essential: true };
 }
 
 export function flightHome(viewport: Viewport): FlyToOptions {

@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable react-hooks/immutability -- three.js uniforms are mutated imperatively from director frames, outside render, by design. */
+
 import { useMemo } from "react";
 import { MeshStandardMaterial } from "three";
 import type { AreaModel } from "@/domain/types";
@@ -9,7 +11,7 @@ import { groundPlanFor } from "../geometry/groundPlan";
 import { buildMarkingsGeometry } from "../geometry/markings";
 import { applyGroundFx, createGroundFxUniforms, type GroundFxUniforms } from "../materials/groundFx";
 import { useDirectorFrame } from "../runtime/SceneRuntime";
-import { useDisposable } from "../runtime/useDisposable";
+import { disposableGroup, useDisposeOnChange } from "../runtime/useDisposable";
 
 /** Width of the soft band at each reveal front, in meters. */
 const REVEAL_SOFTNESS = 28;
@@ -44,9 +46,9 @@ export function Ground({ area }: { area: AreaModel }) {
     [area],
   );
 
-  const geometry = useDisposable(() => {
+  const geometry = useMemo(() => {
     const blocks = plan.blocks;
-    return {
+    return disposableGroup({
       asphalt: buildDiscGeometry(plan.discRadius, blocks ? LAYERS.asphalt : 0),
       // With the booleans failed, the asphalt becomes ribbons and the base turns into a flat lot.
       fallbackRoads: blocks ? null : buildFallbackRoadGeometry(plan),
@@ -55,27 +57,24 @@ export function Ground({ area }: { area: AreaModel }) {
       lots: plan.lots ? buildPolygonsTopGeometry(plan.lots, LAYERS.lot) : null,
       parks: buildParkGeometry(plan.parks),
       markings: buildMarkingsGeometry(plan.network),
-      dispose() {
-        for (const g of [this.asphalt, this.fallbackRoads, this.blocks, this.kerbs, this.lots, this.parks, this.markings]) g?.dispose();
-      },
-    };
+    });
   }, [plan]);
+  useDisposeOnChange(geometry);
 
-  const materials = useDisposable(() => {
+  const materials = useMemo(() => {
     const paintOffset = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 };
-    return {
+    return disposableGroup({
       asphalt: standard(plan.blocks ? PALETTE.asphalt : PALETTE.lot, 0.94, fx.asphalt, "asphalt"),
       fallbackRoads: standard(PALETTE.asphalt, 0.94, fx.plinth, "fallback-roads", paintOffset),
       sidewalk: standard(PALETTE.sidewalk, 0.9, fx.plinth, "sidewalk"),
-      lot: standard(PALETTE.lot, 0.95, fx.plinth, "lot"),
+      // 2 cm above the sidewalk is plenty up close; the offset covers the far, faded rim.
+      lot: standard(PALETTE.lot, 0.95, fx.plinth, "lot", { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
       kerb: standard(PALETTE.kerb, 0.8, fx.plinth, "kerb"),
       park: standard(PALETTE.park, 0.97, fx.plinth, "park"),
       paint: standard("#ffffff", 0.7, fx.paint, "paint", { vertexColors: true, ...paintOffset }),
-      dispose() {
-        for (const m of [this.asphalt, this.fallbackRoads, this.sidewalk, this.lot, this.kerb, this.park, this.paint]) m.dispose();
-      },
-    };
+    });
   }, [plan, fx]);
+  useDisposeOnChange(materials);
 
   const maxRadius = plan.discRadius * 1.05 + REVEAL_SOFTNESS;
   useDirectorFrame((frame) => {
