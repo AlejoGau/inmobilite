@@ -1,5 +1,7 @@
 import { Matrix4, Vector3 } from "three";
 import type { AreaModel } from "@/domain/types";
+import { partCorners } from "../geometry/buildingExtent";
+import { roofAllowance } from "../geometry/buildingGeometry";
 
 export type Vec3 = [number, number, number];
 
@@ -37,7 +39,25 @@ export interface ShadowFrustum {
   far: number;
 }
 
-/** Points the shadow map must cover: every building (and where its shadow lands) plus the nearby ground. */
+/**
+ * Height at which the shadow of a caster standing at (x, z) reaches the edge
+ * of the ground disc. Anything above it throws its shadow off the model, so
+ * the shadow camera need not cover it: at an 18° sun a 75 m tower casts a
+ * 230 m shadow, and covering all of it would blur every other shadow.
+ */
+function heightReachingEdge(x: number, z: number, sun: Vec3, radius: number): number {
+  // Solve |p - s * horizontal(sun)| = radius for s >= 0 along the shadow direction.
+  const dx = -sun[0];
+  const dz = -sun[2];
+  const a = dx * dx + dz * dz;
+  const b = 2 * (x * dx + z * dz);
+  const c = x * x + z * z - radius * radius;
+  if (c >= 0) return 0; // the caster itself stands outside the disc
+  const s = (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a);
+  return s * sun[1];
+}
+
+/** Points the shadow map must cover: every part of every building (and where its shadow lands) plus the nearby ground. */
 export function shadowPoints(area: AreaModel, sun: Vec3 = sunDirection()): Vec3[] {
   const points: Vec3[] = [];
   const withTip = (x: number, y: number, z: number) => {
@@ -47,9 +67,11 @@ export function shadowPoints(area: AreaModel, sun: Vec3 = sunDirection()): Vec3[
     points.push([x - sun[0] * k, 0, z - sun[2] * k]);
   };
   for (const b of area.buildings) {
-    for (const [x, north] of b.footprint) {
+    const allowance = roofAllowance(b);
+    for (const [x, north, height] of partCorners(b)) {
       points.push([x, 0, -north]);
-      withTip(x, b.height + 4, -north);
+      const reach = heightReachingEdge(x, -north, sun, area.radius);
+      if (reach > 0) withTip(x, Math.min(height + allowance, reach), -north);
     }
   }
   for (let i = 0; i < 24; i++) {

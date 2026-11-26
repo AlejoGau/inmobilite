@@ -1,6 +1,7 @@
 import { HANDOFF_CAMERA, handoffCameraDistance } from "@/domain/handoffCamera";
 import { mulberry32, randomBetween } from "@/domain/seed";
 import type { AreaModel } from "@/domain/types";
+import { partCorners } from "../geometry/buildingExtent";
 
 export type Vec3 = [number, number, number];
 
@@ -74,14 +75,14 @@ export function orbitPosition(bearingDeg: number, polarDeg: number, distance: nu
   return out;
 }
 
-/** Corners, at ground and roof level, of the buildings the hero shot frames (three space). */
+/** Corners, at ground and roof level, of every part of the buildings the hero shot frames (three space). */
 function framedBuildingPoints(area: AreaModel): Vec3[] {
   const sorted = [...area.buildings].sort((a, b) => a.distance - b.distance);
   const count = Math.max(HERO_SPEC.minFramed, Math.ceil(sorted.length * HERO_SPEC.framingShare));
   const points: Vec3[] = [];
   for (const b of sorted.slice(0, count)) {
-    for (const [x, y] of b.footprint) {
-      points.push([x, 0, -y], [x, b.height, -y]);
+    for (const [x, y, height] of partCorners(b)) {
+      points.push([x, 0, -y], [x, height, -y]);
     }
   }
   return points;

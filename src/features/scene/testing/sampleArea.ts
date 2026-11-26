@@ -14,6 +14,7 @@ function building(id: string, footprint: Ring, height: number, levels: number, d
   return {
     id,
     footprint,
+    parts: [{ footprint, height }],
     height,
     levels,
     heightSource: "estimated",

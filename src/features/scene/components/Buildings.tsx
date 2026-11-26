@@ -32,9 +32,12 @@ export interface BuildingsProps {
 }
 
 /**
- * The modelled buildings (at most 20): one mesh each, so hover and click are
- * a plain raycast. They rise from the corner outwards, scaled in Y by the
- * director, with a light line riding on top while they grow.
+ * The modelled buildings (at most 20): one mesh each, with every part
+ * (podium, tower, setbacks, rooftop volumes) merged into it, so a building is
+ * one draw call, hovering or clicking any part is a plain raycast on its
+ * building, and all its parts rise together. They rise from the corner
+ * outwards, scaled in Y by the director, with a light line riding on top of
+ * each part while they grow.
  */
 export function Buildings({ area, selectedBuildingId, onSelectBuilding, clickMaySelect }: BuildingsProps) {
   const { director, exploring } = useSceneRuntime();
@@ -44,7 +47,7 @@ export function Buildings({ area, selectedBuildingId, onSelectBuilding, clickMay
     () =>
       area.buildings.map((building): BuildingPart => {
         const mesh = buildBuildingGeometry(building);
-        return { building, mesh, material: createBuildingMaterial(building, mesh) };
+        return { building, mesh, material: createBuildingMaterial(building) };
       }),
     [area],
   );

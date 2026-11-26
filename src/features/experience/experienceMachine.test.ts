@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AreaModel } from "@/domain/types";
+import type { AreaModel, Ring } from "@/domain/types";
 import {
   createInitialState,
   experienceReducer,
@@ -12,6 +12,12 @@ import {
 const acoyte: Destination = { label: "Av. Acoyte y Av. Rivadavia", secondary: "Caballito, CABA", lat: -34.6183, lng: -58.43646 };
 const callao: Destination = { label: "Av. Corrientes y Av. Callao", lat: -34.6043, lng: -58.3923 };
 
+const TRIANGLE: Ring = [
+  [0, 0],
+  [10, 0],
+  [10, 10],
+];
+
 function makeArea(buildingIds: string[] = ["b1", "b2"]): AreaModel {
   return {
     origin: { lat: acoyte.lat, lng: acoyte.lng },
@@ -20,11 +26,8 @@ function makeArea(buildingIds: string[] = ["b1", "b2"]): AreaModel {
     roads: [],
     buildings: buildingIds.map((id, i) => ({
       id,
-      footprint: [
-        [0, 0],
-        [10, 0],
-        [10, 10],
-      ],
+      footprint: TRIANGLE,
+      parts: [{ footprint: TRIANGLE, height: 12 }],
       height: 12,
       levels: 4,
       heightSource: "estimated",

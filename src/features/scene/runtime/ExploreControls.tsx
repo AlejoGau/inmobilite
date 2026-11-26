@@ -4,6 +4,7 @@ import { CameraControls } from "@react-three/drei";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { Box3, Sphere, Vector3 } from "three";
 import type { AreaModel, Building } from "@/domain/types";
+import { partCorners } from "../geometry/buildingExtent";
 import { ringCentroid } from "../geometry/polygon2d";
 import { useSceneRuntime } from "./SceneRuntime";
 
@@ -29,11 +30,21 @@ export interface BuildingFocus {
   radius: number;
 }
 
-/** What the camera frames for a selected building: the middle of its volume, and a sphere around it. */
+/**
+ * What the camera frames for a selected building: the middle of its volume
+ * (half the tallest part's height), and a sphere around it holding every
+ * corner of every part.
+ */
 export function focusFor(building: Building): BuildingFocus {
   const [x, north] = ringCentroid(building.footprint);
-  const radius = Math.max(...building.footprint.map(([px, py]) => Math.hypot(px - x, py - north)));
-  return { building, centre: [x, building.height / 2, -north], radius: Math.hypot(radius, building.height / 2) };
+  const mid = building.height / 2;
+  let radius = mid;
+  for (const [px, py, height] of partCorners(building)) {
+    const horizontal = Math.hypot(px - x, py - north);
+    // The ground corner and the roof corner of this part; the farther one bounds it.
+    radius = Math.max(radius, Math.hypot(horizontal, Math.max(mid, Math.abs(height - mid))));
+  }
+  return { building, centre: [x, mid, -north], radius };
 }
 
 /**

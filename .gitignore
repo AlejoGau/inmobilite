@@ -45,3 +45,6 @@ next-env.d.ts
 
 # generado por scripts/copy-maplibre-worker.mjs
 /public/vendor/
+
+# Everything Claude Code (ECC), instalado localmente para este proyecto
+/.claude/

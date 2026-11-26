@@ -2,14 +2,13 @@ import { Color, MeshStandardMaterial, type WebGLProgramParametersWithUniforms } 
 import { mulberry32, randomBetween } from "@/domain/seed";
 import type { Building } from "@/domain/types";
 import { PALETTE } from "../config/palette";
-import { FACADE_ATTRIBUTE, type BuildingMeshData } from "../geometry/buildingGeometry";
+import { FACADE_ATTRIBUTE, FACADE_TOP_ATTRIBUTE } from "../geometry/buildingGeometry";
+import { floorHeightOf } from "../geometry/buildingPlan";
 
 /** Facade grammar, in meters. */
 export const FACADE_SPEC = {
   windowPitch: 2.6,
   windowWidth: 1.4,
-  minFloorHeight: 2.7,
-  maxFloorHeight: 4.2,
   /** Share of lit windows at dusk, per building. */
   litRatio: [0.35, 0.55] as const,
   /** Emissive strength of a lit window: the brighter ones cross the bloom threshold, the dimmer ones do not. */
@@ -24,10 +23,8 @@ export interface BuildingUniforms {
   uEdgeGlow: { value: number };
   /** Hover / selection highlight, 0..1. */
   uHighlight: { value: number };
-  uRimHeight: { value: number };
-  uWallHeight: { value: number };
+  /** Storey height of the window grid: the GCBA's real 2.8 m, or height / levels (see floorHeightOf). */
   uFloorHeight: { value: number };
-  uLevels: { value: number };
   uCommercial: { value: number };
   uSeed: { value: number };
   uLitRatio: { value: number };
@@ -42,12 +39,16 @@ export interface BuildingUniforms {
 
 const VERTEX_PARS = /* glsl */ `
 attribute vec3 ${FACADE_ATTRIBUTE};
+attribute vec3 ${FACADE_TOP_ATTRIBUTE};
 varying vec3 vFacade;
+varying vec3 vFacadeTop;
 varying float vBldHeight;
 `;
 
 const VERTEX_MAIN = /* glsl */ `
 vFacade = ${FACADE_ATTRIBUTE};
+// Limits of the part this face belongs to: a podium and its tower top out at different heights.
+vFacadeTop = ${FACADE_TOP_ATTRIBUTE};
 // Object-space height: unaffected by the rise scale, so windows never squash.
 vBldHeight = position.y;
 `;
@@ -56,10 +57,7 @@ const FRAGMENT_PARS = /* glsl */ `
 uniform float uScaleY;
 uniform float uEdgeGlow;
 uniform float uHighlight;
-uniform float uRimHeight;
-uniform float uWallHeight;
 uniform float uFloorHeight;
-uniform float uLevels;
 uniform float uCommercial;
 uniform float uSeed;
 uniform float uLitRatio;
@@ -71,6 +69,7 @@ uniform vec3 uGlowSoft;
 uniform vec3 uStoreGlow;
 uniform vec3 uAccent;
 varying vec3 vFacade;
+varying vec3 vFacadeTop;
 varying float vBldHeight;
 
 // Hash without sine (Dave Hoskins): stable across GPUs, unlike fract(sin()).
@@ -92,6 +91,9 @@ const HALF_WINDOW = (FACADE_SPEC.windowWidth / 2).toFixed(3);
 const FRAGMENT_MAIN = /* glsl */ `
 {
   float h = vBldHeight;
+  float wallTop = vFacadeTop.x;
+  float rimTop = vFacadeTop.y;
+  float levels = vFacadeTop.z;
   float halfLen = vFacade.z;
   if (halfLen > 0.0) {
     float u = vFacade.x;
@@ -105,7 +107,7 @@ const FRAGMENT_MAIN = /* glsl */ `
 
     // A column exists only if the whole window fits on this facade.
     float fits = step(abs(colIdx) * ${PITCH} + ${HALF_WINDOW} + 0.45, halfLen);
-    float onFloor = step(floorIdx + 1.0, uLevels + 0.01) * (1.0 - step(uWallHeight - 0.3, h));
+    float onFloor = step(floorIdx + 1.0, levels + 0.01) * (1.0 - step(wallTop - 0.3, h));
     float sill = uFloorHeight * 0.3;
     float head = uFloorHeight * 0.82;
     float inCol = bldBand(fu, ${HALF_WINDOW}, aa.x);
@@ -138,9 +140,9 @@ const FRAGMENT_MAIN = /* glsl */ `
     totalEmissiveRadiance += store * storeLit * uStoreGlow * uStoreIntensity;
   }
 
-  // Soft light line riding on top of the building while it rises.
+  // Soft light line riding on top of each part while the building rises.
   float band = 0.6 / max(uScaleY, 0.04);
-  float rim = smoothstep(uRimHeight - band, uRimHeight, h) * (1.0 - step(uRimHeight + 0.01, h));
+  float rim = smoothstep(rimTop - band, rimTop, h) * (1.0 - step(rimTop + 0.01, h));
   totalEmissiveRadiance += uAccent * (rim * uEdgeGlow * 4.0);
 
   // Hover and selection: a teal fresnel rim plus a faint tint.
@@ -175,18 +177,13 @@ export interface BuildingMaterial {
   uniforms: BuildingUniforms;
 }
 
-export function createBuildingMaterial(building: Building, mesh: BuildingMeshData): BuildingMaterial {
+export function createBuildingMaterial(building: Building): BuildingMaterial {
   const rng = mulberry32(building.seed ^ 0x165667b1);
-  const levels = Math.max(1, building.levels);
-  const floorHeight = Math.min(FACADE_SPEC.maxFloorHeight, Math.max(FACADE_SPEC.minFloorHeight, mesh.wallHeight / levels));
   const uniforms: BuildingUniforms = {
     uScaleY: { value: 1 },
     uEdgeGlow: { value: 0 },
     uHighlight: { value: 0 },
-    uRimHeight: { value: mesh.rimHeight },
-    uWallHeight: { value: mesh.wallHeight },
-    uFloorHeight: { value: floorHeight },
-    uLevels: { value: levels },
+    uFloorHeight: { value: floorHeightOf(building) },
     uCommercial: { value: building.use === "commercial" ? 1 : 0 },
     // Small and well inside float precision: the raw seed is a 32-bit integer.
     uSeed: { value: (building.seed % 9973) * 0.731 },
@@ -202,6 +199,6 @@ export function createBuildingMaterial(building: Building, mesh: BuildingMeshDat
   const material = new MeshStandardMaterial({ color: clayColour(building.seed), roughness: 0.85, metalness: 0 });
   material.onBeforeCompile = (shader) => patchBuildingShader(shader, uniforms);
   // Every building runs the same shader code; only uniforms differ.
-  material.customProgramCacheKey = () => "inmobilite-building-v1";
+  material.customProgramCacheKey = () => "inmobilite-building-v2";
   return { material, uniforms };
 }

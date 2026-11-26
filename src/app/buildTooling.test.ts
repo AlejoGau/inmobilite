@@ -25,8 +25,9 @@ describe("npm run lint", () => {
   // scripts/copy-maplibre-worker.mjs. Linting it reports over a thousand
   // warnings that are not ours to fix and that bury the real ones.
   // The timeout leaves room to load the real config and all of Next's plugins
-  // on a cold start.
-  it("skips the generated MapLibre worker but still lints our own code", { timeout: 20_000 }, async () => {
+  // on a cold start. It takes under 2 s on an idle machine, but once took 80 s
+  // while the machine was busy, so the margin is generous on purpose.
+  it("skips the generated MapLibre worker but still lints our own code", { timeout: 60_000 }, async () => {
     const eslint = new ESLint({ cwd: projectRoot });
     const isIgnored = (file: string) => eslint.isPathIgnored(path.join(projectRoot, file));
 

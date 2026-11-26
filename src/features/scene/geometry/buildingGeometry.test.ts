@@ -5,8 +5,10 @@ import { dot, triangles, windingMatchesNormals } from "../testing/geometryChecks
 import { BUILDING_SPEC, buildBuildingGeometry, FACADE_ATTRIBUTE } from "./buildingGeometry";
 
 function building(overrides: Partial<Building> & { footprint: Ring }): Building {
+  const height = overrides.height ?? 12;
   return {
     id: "b",
+    parts: [{ footprint: overrides.footprint, height }],
     height: 12,
     levels: 4,
     heightSource: "osm",

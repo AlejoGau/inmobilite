@@ -69,17 +69,45 @@ export type BuildingUse = "residential" | "commercial" | "civic" | "other";
 /** At most this many buildings are modelled: the ones closest to the origin. */
 export const MAX_BUILDINGS = 20;
 
+/**
+ * One volume of a building: a prism from the ground up to `height`. A plain
+ * block has a single part. A real Buenos Aires building often has several: a
+ * podium plus a tower, stepped setbacks, rooftop machine rooms or tanks. The
+ * parts of a building tile its lot without overlapping.
+ */
+export interface BuildingPart {
+  /** Footprint of this volume, in local meters. */
+  footprint: Ring;
+  /** Height of this volume's roof above the ground, in meters. */
+  height: number;
+}
+
+/**
+ * Where a building's height comes from:
+ * - "gcba": measured. The Buenos Aires city government's 3D city model
+ *   ("Tejido Urbano", photogrammetry), per volume.
+ * - "osm": the OpenStreetMap height or building:levels tag.
+ * - "estimated": a deterministic estimate from the use and the footprint area.
+ */
+export type HeightSource = "gcba" | "osm" | "estimated";
+
 export interface Building {
   id: string;
-  /** Name from OSM, if any ("Banco Ciudad", "Yenny"). */
+  /** Name, if known ("Banco Ciudad", "Yenny"). */
   name?: string;
-  /** Real OpenStreetMap footprint, in local meters. */
+  /**
+   * Outline of the whole building, in local meters: the outer ring of the
+   * union of its parts (inner courtyards are not represented).
+   */
   footprint: Ring;
-  /** Total height in meters. */
+  /** The building's volumes. Always at least one. */
+  parts: BuildingPart[];
+  /** Height of the tallest part, in meters. */
   height: number;
   levels: number;
-  /** "osm" = building:levels/height tag. "estimated" = deterministic estimate from use and footprint area. */
-  heightSource: "osm" | "estimated";
+  heightSource: HeightSource;
+  /** Cadastral parcel (sección-manzana-parcela) when the data comes from the GCBA, e.g. "040-088-009I". */
+  smp?: string;
   use: BuildingUse;
   /** Footprint area in m². */
   area: number;

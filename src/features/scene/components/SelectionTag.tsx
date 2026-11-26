@@ -2,7 +2,7 @@
 
 import { Html } from "@react-three/drei";
 import type { CSSProperties } from "react";
-import type { Building } from "@/domain/types";
+import type { Building, HeightSource } from "@/domain/types";
 import type { BuildingMeshData } from "../geometry/buildingGeometry";
 
 const card: CSSProperties = {
@@ -33,15 +33,31 @@ const accentDot: CSSProperties = {
   verticalAlign: "middle",
 };
 
-function levelsLabel(levels: number): string {
+export function levelsLabel(levels: number): string {
   return levels === 1 ? "1 piso" : `${levels} pisos`;
 }
 
-/** Minimal tag above the selected building: name, levels, and whether the height is estimated. */
+/** How much to trust the height: measured by the city, or guessed. OSM heights need no caveat. */
+export function heightSourceLabel(source: HeightSource): string | null {
+  switch (source) {
+    case "gcba":
+      return "altura medida (GCBA)";
+    case "estimated":
+      return "altura estimada";
+    case "osm":
+      return null;
+  }
+}
+
+/** Gap between the top of the tallest part and the tag, m. */
+const TAG_LIFT = 3;
+
+/** Minimal tag above the tallest part of the selected building: name, levels, height and where the height comes from. */
 export function SelectionTag({ building, mesh }: { building: Building; mesh: BuildingMeshData }) {
-  const [x, , z] = mesh.centre;
+  const [x, y, z] = mesh.tagAnchor;
+  const source = heightSourceLabel(building.heightSource);
   return (
-    <Html position={[x, mesh.topHeight + 3, z]} zIndexRange={[20, 0]} pointerEvents="none">
+    <Html position={[x, y + TAG_LIFT, z]} zIndexRange={[20, 0]} pointerEvents="none">
       <div style={card} role="status" aria-live="polite">
         <div>
           <span style={accentDot} aria-hidden="true" />
@@ -49,7 +65,7 @@ export function SelectionTag({ building, mesh }: { building: Building; mesh: Bui
         </div>
         <div style={muted}>
           {levelsLabel(building.levels)} · {Math.round(building.height)} m
-          {building.heightSource === "estimated" ? " · altura estimada" : ""}
+          {source ? ` · ${source}` : ""}
         </div>
       </div>
     </Html>

@@ -67,10 +67,14 @@ function toBuilding(c: Candidate): Building {
   const id = refId(c.ref);
   const seed = hashString(id);
   const use = resolveUse(tags);
+  const footprint = c.footprint.map(roundVec);
+  const height = resolveHeight(tags, use, c.area, seed);
   const building: Building = {
     id,
-    footprint: c.footprint.map(roundVec),
-    ...resolveHeight(tags, use, c.area, seed),
+    footprint,
+    // An OSM way is a single volume: one part, the full footprint at the full height.
+    parts: [{ footprint, height: height.height }],
+    ...height,
     use,
     area: Math.round(c.area * 10) / 10,
     distance: round3(c.distance),

@@ -3,6 +3,18 @@
 > Última actualización: 24/11/2026 (noche). Para retomar en otra máquina, con o sin Claude.
 > El plan de producto completo y las decisiones están en [PLAN.md](PLAN.md).
 
+## ⚠️ Fase 1 "edificios reales" EN CURSO (26/11/2026)
+
+Decidido: volumen real de los 20 edificios con el **Tejido Urbano 3D del GCBA** (altura medida, basamento + torre, retiros) y calles/parques desde **tiles de OpenFreeMap** (Overpass solo como complemento). Después, fase 2: fachadas parecidas leídas de fotos con IA.
+
+Estado del código (trabajo cortado a mitad para ahorrar consumo):
+- ✅ Contrato: `Building.parts` + `heightSource: "gcba"` (`src/domain/types.ts`), lector de tiles (`src/infra/tiles`, `src/domain/geo/tiles.ts`).
+- ✅ GCBA: `src/infra/gcba` + `src/domain/area/gcbaBuildings.ts` (terminado, con tests).
+- 🟡 OpenFreeMap: `src/infra/openfreemap` + `src/domain/area/tileContext.ts` — **2 tests fallan** (re-nodo de cruces y superficies superpuestas en bordes de tile).
+- 🟡 Escena con edificios de varias partes (`src/features/scene`): a medias.
+- ⬜ Falta: `composeArea`, conectar `/api/area`, fixture offline con tiles, atribución GCBA (CC BY 2.5 AR) en el panel.
+- ECC (everything-claude-code) instalado localmente en `.claude/` (perfil minimal, sin hooks); está en `.gitignore`.
+
 ## Qué es el demo
 
 Escribís una esquina de Buenos Aires ("acoyte y riva") y la app:
