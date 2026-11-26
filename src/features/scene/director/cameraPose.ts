@@ -1,4 +1,5 @@
 import { HANDOFF_CAMERA, handoffCameraDistance } from "@/domain/handoffCamera";
+import { propertyFront } from "@/domain/area/facade";
 import { mulberry32, randomBetween } from "@/domain/seed";
 import type { AreaModel } from "@/domain/types";
 import { partCorners } from "../geometry/buildingExtent";
@@ -51,6 +52,14 @@ export const HERO_SPEC = {
   /** How far the target moves from the corner towards the framed buildings' centre. */
   targetPull: 0.45,
   targetHeight: 4,
+  /**
+   * With a searched property, the camera looks at its front from across the
+   * street, turned this much off the wall's normal: dead-on hides the depth
+   * of the block, while ~20° still reads the photo almost undistorted.
+   */
+  facadeSkewDeg: 20,
+  /** How far the target moves from the framing centre to the property's front. */
+  propertyPull: 0.55,
   /** Aspect used for framing when the viewport is unknown. */
   defaultAspect: 16 / 10,
 } as const;
@@ -79,12 +88,18 @@ export function orbitPosition(bearingDeg: number, polarDeg: number, distance: nu
   return out;
 }
 
-/** Corners, at ground and roof level, of every part of the buildings the hero shot frames (three space). */
+/**
+ * Corners, at ground and roof level, of every part of the buildings the hero
+ * shot frames (three space): the closest ones, plus the featured ones, which
+ * the shot is about.
+ */
 function framedBuildingPoints(area: AreaModel): Vec3[] {
   const sorted = [...area.buildings].sort((a, b) => a.distance - b.distance);
   const count = Math.max(HERO_SPEC.minFramed, Math.ceil(sorted.length * HERO_SPEC.framingShare));
+  const featured = new Set(area.featuredBuildingIds ?? []);
+  const framed = sorted.filter((b, i) => i < count || featured.has(b.id));
   const points: Vec3[] = [];
-  for (const b of sorted.slice(0, count)) {
+  for (const b of framed) {
     for (const [x, y, height] of partCorners(b)) {
       points.push([x, 0, -y], [x, height, -y]);
     }
@@ -121,6 +136,27 @@ export function fitDistance(points: Vec3[], target: Vec3, bearingDeg: number, po
   return needed;
 }
 
+/** Smallest signed difference a - b between two bearings, in (-180, 180]. */
+function bearingDelta(a: number, b: number): number {
+  const d = (((a - b) % 360) + 540) % 360 - 180;
+  return d === -180 ? 180 : d;
+}
+
+/**
+ * Bearing that looks at the searched property's front from across the
+ * street (against its outward normal), skewed toward the default 3/4 bearing
+ * so the sunlit faces and the corner stay in the shot. Null without a property.
+ */
+export function propertyBearing(area: AreaModel): number | null {
+  const property = propertyFront(area);
+  if (!property) return null;
+  const [nx, ny] = property.normal;
+  // Looking along -normal; bearing is atan2(east, north) of the look direction.
+  const facing = Math.atan2(-nx, -ny) / DEG;
+  const side = Math.sign(bearingDelta(HERO_SPEC.bearingDeg, facing)) || 1;
+  return (facing + side * HERO_SPEC.facadeSkewDeg + 360) % 360;
+}
+
 /**
  * The 3/4 hero view at the end of the intro: about 40° down onto the corner,
  * 110-150 m away, framing the buildings around it, with a small seeded
@@ -128,7 +164,10 @@ export function fitDistance(points: Vec3[], target: Vec3, bearingDeg: number, po
  */
 export function heroPose(area: AreaModel, aspect: number = HERO_SPEC.defaultAspect): OrbitPose {
   const rng = mulberry32(area.seed ^ 0x2545f491);
-  const bearingDeg = HERO_SPEC.bearingDeg + randomBetween(rng, -HERO_SPEC.bearingJitterDeg, HERO_SPEC.bearingJitterDeg);
+  const jitter = randomBetween(rng, -HERO_SPEC.bearingJitterDeg, HERO_SPEC.bearingJitterDeg);
+  const facing = propertyBearing(area);
+  // With a searched property the shot is about its facade: only a small part of the jitter, so the photo stays readable.
+  const bearingDeg = facing !== null ? facing + jitter * 0.25 : HERO_SPEC.bearingDeg + jitter;
   const points = framedBuildingPoints(area);
 
   let target: Vec3 = [0, HERO_SPEC.targetHeight, 0];
@@ -145,6 +184,12 @@ export function heroPose(area: AreaModel, aspect: number = HERO_SPEC.defaultAspe
     }
     const pull = HERO_SPEC.targetPull;
     target = [((minX + maxX) / 2) * pull, HERO_SPEC.targetHeight, ((minZ + maxZ) / 2) * pull];
+  }
+  const property = propertyFront(area);
+  if (property) {
+    // Lean the target onto the property's front, keeping the corner in frame through the fit below.
+    const k = HERO_SPEC.propertyPull;
+    target = [target[0] + (property.mid[0] - target[0]) * k, HERO_SPEC.targetHeight, target[2] + (-property.mid[1] - target[2]) * k];
   }
 
   const fit = points.length ? fitDistance(points, target, bearingDeg, HERO_SPEC.polarDeg, HERO_SPEC.fovDeg, aspect) * HERO_SPEC.padding : 0;

@@ -3,6 +3,14 @@
 > Última actualización: 24/11/2026 (noche). Para retomar en otra máquina, con o sin Claude.
 > El plan de producto completo y las decisiones están en [PLAN.md](PLAN.md).
 
+## Fase 2 "fachada real de la propiedad": ✅ código listo, ⚠️ sin verificar en vivo (26/11/2026, sin commitear)
+
+- La propiedad buscada (parcela del punto, vía geocodificador inverso de USIG) + sus 2 vecinos más cercanos llevan la **foto oficial de fachada del GCBA/USIG** pegada en la pared que da a la calle, con altura aproximada, y el color del edificio tomado de la foto. Si no hay foto, quedan como antes.
+- Cámara final mirando el frente de la propiedad; línea turquesa en la vereda como marca; ficha con la foto, la fecha y "Propiedad buscada".
+- Código: `src/domain/area/facade.ts`, `src/infra/gcba/fotos.ts`, `src/features/scene/{geometry/facadeGeometry.ts,components/FacadePhoto.tsx,components/PropertyMarker.tsx,materials/facadeMaterial.ts}`. 296 tests, typecheck, lint y build en verde.
+- **No se pudo ver andando:** el 26/11, desde la PC de la oficina, `ws.usig`, `fotos.usig`, `servicios.usig` y `epok` rechazaban la conexión (SSL, código 35/52); solo los tiles 3D respondían. Puede ser un bloqueo del GCBA a esa IP. Sin USIG la app sigue andando (el buscador cae a Photon, la propiedad pasa a ser el edificio más cercano y no se muestran fotos).
+- **Para verificar en casa:** buscar Acoyte y Rivadavia y chequear que la foto quede del lado de la calle, derecha, sin parpadeo, que suba con el edificio y que la ficha la muestre. Fotos de 2005-2006, baja resolución, con marca de agua: es una aproximación.
+
 ## Fase 1 "edificios reales": ✅ terminada (26/11/2026, sin commitear)
 
 - **Volumen real de los 20 edificios** con el Tejido Urbano 3D del GCBA (`src/infra/gcba`, `src/domain/area/gcbaBuildings.ts`): altura medida, basamento + torre, retiros. En Acoyte y Rivadavia: 20 edificios, 194 volúmenes, torres de 44,8 y 42 m, 0 alturas estimadas.

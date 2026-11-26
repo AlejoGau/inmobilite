@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { GCBA_ATTRIBUTION, type TileSources } from "@/domain/area/areaFromTiles";
+import { FACADE_CREDIT, normalizeSmp } from "@/domain/area/facade";
 import { createProjection } from "@/domain/geo/projection";
 import { centroid } from "@/domain/geo/polygon";
 import type { OverpassResponse } from "@/domain/osm/overpass";
@@ -149,5 +150,73 @@ describe("area handler", () => {
     expect(far.status).toBe(503);
     expect(far.body).toEqual({ error: "No pudimos traer los datos del mapa de esta zona. Probá de nuevo en un rato." });
     expect(far.headers["Cache-Control"]).toBe("no-store");
+  });
+
+  describe("facade photos", () => {
+    const photoUrl = (smp: string) => `https://fotos.test/getFoto?smp=${smp}&i=0&w=1024`;
+    const photoDeps = (overrides: Partial<AreaHandlerDeps> = {}) =>
+      deps({
+        reverseGeocodeSmp: vi.fn(async () => null),
+        fetchFacadePhoto: vi.fn(async (smp: string) => ({ url: photoUrl(smp), date: "2006-07-07" })),
+        facadeBudgetMs: 50,
+        ...overrides,
+      });
+
+    it("features the searched parcel and its 2 neighbours, each with its photo and front wall", async () => {
+      const base = model((await createAreaHandler(deps())(ACOYTE.lat, ACOYTE.lng)).body);
+      // A parcel that is not the closest one, in the reverse geocoder's unpadded spelling.
+      const target = base.buildings[5];
+      const unpadded = target.smp!.replace(/^0+/, "");
+      const d = photoDeps({ reverseGeocodeSmp: vi.fn(async () => unpadded) });
+      const result = await createAreaHandler(d)(ACOYTE.lat, ACOYTE.lng);
+      const area = model(result.body);
+
+      expect(d.reverseGeocodeSmp).toHaveBeenCalledWith(FIXTURE_ORIGIN, expect.any(AbortSignal));
+      expect(area.featuredBuildingIds).toHaveLength(3);
+      expect(area.featuredBuildingIds![0]).toBe(target.id);
+      expect(d.fetchFacadePhoto).toHaveBeenCalledTimes(3);
+      const withPhoto = area.buildings.filter((b) => b.facade);
+      expect(withPhoto.map((b) => b.id).sort()).toEqual([...area.featuredBuildingIds!].sort());
+      for (const b of withPhoto) {
+        expect(b.facade!.url).toBe(photoUrl(normalizeSmp(b.smp!)!));
+        expect(b.facade!.credit).toBe(FACADE_CREDIT);
+        expect(b.facade!.front).toHaveLength(2);
+      }
+      expect(area.attribution).toContain(FACADE_CREDIT);
+      expect(result.headers["Cache-Control"]).toContain("max-age=3600");
+    });
+
+    it("ignores a reverse geocoder or photo service that fails or hangs, with a short cache", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const d = photoDeps({
+        reverseGeocodeSmp: vi.fn(() => new Promise<never>(() => {})),
+        fetchFacadePhoto: vi.fn(async (smp: string) => {
+          if (smp.endsWith("1")) throw new Error("down");
+          return { url: photoUrl(smp) };
+        }),
+      });
+      const result = await createAreaHandler(d)(ACOYTE.lat, ACOYTE.lng);
+      const area = model(result.body);
+      expect(result.status).toBe(200);
+      // Without the parcel, the property is the building nearest the origin.
+      const nearest = [...area.buildings].sort((a, b) => a.distance - b.distance)[0];
+      expect(area.featuredBuildingIds![0]).toBe(nearest.id);
+      expect(result.headers["Cache-Control"]).toBe("public, max-age=60");
+    });
+
+    it("does not ask the reverse geocoder outside CABA", async () => {
+      const d = photoDeps({ fetchTejido: async () => null });
+      await createAreaHandler(d)("-31.42", "-64.18");
+      expect(d.reverseGeocodeSmp).not.toHaveBeenCalled();
+    });
+
+    it("marks the featured buildings on the offline fixture, without photos", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const d = photoDeps({ fetchTileFeatures: fail, loadFixture: (origin) => loadTileFixture(origin, AREA_RADII) });
+      const area = model((await createAreaHandler(d)(ACOYTE.lat, ACOYTE.lng)).body);
+      expect(area.featuredBuildingIds).toHaveLength(3);
+      expect(area.buildings.some((b) => b.facade)).toBe(false);
+      expect(d.fetchFacadePhoto).not.toHaveBeenCalled();
+    });
   });
 });

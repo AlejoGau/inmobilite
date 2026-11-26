@@ -166,7 +166,13 @@ export function Experience() {
         />
       )}
 
-      {selectedBuilding && <BuildingCard building={selectedBuilding} onClose={closeBuilding} />}
+      {selectedBuilding && (
+        <BuildingCard
+          building={selectedBuilding}
+          onClose={closeBuilding}
+          isSearchedProperty={area?.featuredBuildingIds?.[0] === selectedBuilding.id}
+        />
+      )}
     </main>
   );
 }

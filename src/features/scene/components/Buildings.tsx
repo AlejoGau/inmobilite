@@ -3,12 +3,14 @@
 /* eslint-disable react-hooks/immutability -- three.js objects (uniforms, meshes, renderer) are mutated imperatively outside render, by design. */
 
 import { useThree, type ThreeEvent } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
-import type { Mesh } from "three";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import type { Color, Mesh, MeshStandardMaterial } from "three";
 import type { AreaModel, Building } from "@/domain/types";
 import { buildBuildingGeometry, type BuildingMeshData } from "../geometry/buildingGeometry";
 import { createBuildingMaterial, type BuildingMaterial } from "../materials/buildingMaterial";
+import { FACADE_MATERIAL_SPEC, setFacadeHighlight } from "../materials/facadeMaterial";
 import { useDirectorFrame, useSceneRuntime } from "../runtime/SceneRuntime";
+import { FacadePhoto } from "./FacadePhoto";
 import { SelectionTag } from "./SelectionTag";
 
 /** Pointer travel (px) above which a press is a drag (orbiting), not a click. */
@@ -21,6 +23,8 @@ interface BuildingPart {
   building: Building;
   mesh: BuildingMeshData;
   material: BuildingMaterial;
+  /** The clay colour before any photo tint, so a re-tint never compounds. */
+  clay: Color;
 }
 
 export interface BuildingsProps {
@@ -47,7 +51,8 @@ export function Buildings({ area, selectedBuildingId, onSelectBuilding, clickMay
     () =>
       area.buildings.map((building): BuildingPart => {
         const mesh = buildBuildingGeometry(building);
-        return { building, mesh, material: createBuildingMaterial(building) };
+        const material = createBuildingMaterial(building);
+        return { building, mesh, material, clay: material.material.color.clone() };
       }),
     [area],
   );
@@ -62,6 +67,17 @@ export function Buildings({ area, selectedBuildingId, onSelectBuilding, clickMay
   );
 
   const meshes = useRef<Array<Mesh | null>>([]);
+  // Facade photos of the featured buildings, by building index; they rise and light up with their building.
+  const facadeMeshes = useRef<Array<Mesh | null>>([]);
+  const tintTowardPhoto = useCallback(
+    (index: number, colour: Color) => {
+      const part = parts[index];
+      if (part) part.material.material.color.copy(part.clay).lerp(colour, FACADE_MATERIAL_SPEC.clayTint);
+    },
+    [parts],
+  );
+  // One stable callback per building: a new area (new materials) re-tints from the photo already loaded.
+  const tintCallbacks = useMemo(() => parts.map((_, i) => (colour: Color) => tintTowardPhoto(i, colour)), [parts, tintTowardPhoto]);
   // The building under the pointer, tracked during the intro too: R3F reports
   // entering a mesh only once, so a hover that began mid-intro must already be
   // known at the hand-over. Only what it shows (cursor, highlight) waits for
@@ -95,6 +111,12 @@ export function Buildings({ area, selectedBuildingId, onSelectBuilding, clickMay
       const target = id === selectedBuildingId ? 1 : exploring && id === hovered.current ? HOVER_LEVEL : 0;
       highlight[i] += (target - highlight[i]) * follow;
       u.uHighlight.value = highlight[i];
+      const facade = facadeMeshes.current[i];
+      if (facade) {
+        facade.visible = mesh.visible;
+        facade.scale.y = mesh.scale.y;
+        setFacadeHighlight(facade.material as MeshStandardMaterial, highlight[i]);
+      }
     }
   });
 
@@ -135,6 +157,21 @@ export function Buildings({ area, selectedBuildingId, onSelectBuilding, clickMay
           {...handlers(part.building)}
         />
       ))}
+      {parts.map(
+        (part, i) =>
+          part.building.facade && (
+            <FacadePhoto
+              key={`facade:${part.building.id}`}
+              building={part.building}
+              facade={part.building.facade}
+              register={(m) => {
+                facadeMeshes.current[i] = m;
+              }}
+              onColour={tintCallbacks[i]}
+              {...handlers(part.building)}
+            />
+          ),
+      )}
       {exploring && selectedPart && <SelectionTag building={selectedPart.building} mesh={selectedPart.mesh} />}
     </group>
   );

@@ -16,6 +16,8 @@ export interface FetchJsonOptions {
   timeoutMs: number;
   signal?: AbortSignal;
   init?: RequestInit;
+  /** Turns the raw body into JSON, for services that wrap it (JSONP-style parentheses). Defaults to JSON.parse. */
+  parseBody?: (text: string) => unknown;
 }
 
 /**
@@ -26,7 +28,7 @@ export interface FetchJsonOptions {
 export async function fetchJson<S extends z.ZodType>(
   url: string,
   schema: S,
-  { timeoutMs, signal, init }: FetchJsonOptions,
+  { timeoutMs, signal, init, parseBody = JSON.parse }: FetchJsonOptions,
 ): Promise<z.infer<S>> {
   const timeout = AbortSignal.timeout(timeoutMs);
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
@@ -49,7 +51,7 @@ export async function fetchJson<S extends z.ZodType>(
 
   let body: unknown;
   try {
-    body = await response.json();
+    body = parseBody(await response.text());
   } catch (error) {
     if (signal?.aborted) throw error;
     throw new UpstreamError(`Invalid or truncated JSON from ${url}`, response.status);

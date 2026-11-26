@@ -8,6 +8,7 @@ import { Buildings } from "./components/Buildings";
 import { Effects } from "./components/Effects";
 import { Ground } from "./components/Ground";
 import { Lighting } from "./components/Lighting";
+import { PropertyMarker } from "./components/PropertyMarker";
 import { StreetLabels } from "./components/StreetLabels";
 import { Trees } from "./components/Trees";
 import { PALETTE } from "./config/palette";
@@ -84,6 +85,7 @@ export function SceneRoot({ area, playId, showLabels, selectedBuildingId, onSele
       <Buildings area={area} selectedBuildingId={selectedBuildingId} onSelectBuilding={onSelectBuilding} clickMaySelect={interaction.clickMaySelect} />
       <Trees area={area} />
       <Beacon />
+      <PropertyMarker area={area} />
       <Suspense fallback={null}>
         <StreetLabels area={area} show={showLabels} />
       </Suspense>

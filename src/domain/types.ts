@@ -115,6 +115,28 @@ export interface Building {
   distance: number;
   /** Per-building deterministic seed, for colour or material variation. */
   seed: number;
+  /** Real street-level photo of the facade, only on the featured buildings (see AreaModel.featuredBuildingIds). */
+  facade?: FacadePhoto;
+}
+
+/**
+ * A real photo of a building's street front (GCBA/USIG cadastral photos,
+ * street level, 2005-2006). The scene drapes it over `front`.
+ */
+export interface FacadePhoto {
+  /** Image URL, CORS-enabled so the scene can texture with it. */
+  url: string;
+  /** Date the photo was taken, ISO "YYYY-MM-DD", when known. */
+  date?: string;
+  /** Credit to show wherever the photo appears. */
+  credit: string;
+  /**
+   * The street-facing wall, in local meters: an edge of the footprint,
+   * ordered so the street is on the RIGHT walking from [0] to [1]. Its
+   * outward normal is therefore (dy, -dx) / length, and a viewer on the
+   * street sees [0] on the left and [1] on the right.
+   */
+  front: [Vec2, Vec2];
 }
 
 export interface Park {
@@ -159,6 +181,11 @@ export interface AreaModel {
   labels: StreetLabel[];
   stats: AreaStats;
   attribution: string;
+  /**
+   * The buildings that get the real-facade treatment: the searched property
+   * first, then its two nearest neighbours. Absent in models built before it existed.
+   */
+  featuredBuildingIds?: string[];
 }
 
 export interface AreaErrorResponse {

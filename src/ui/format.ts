@@ -18,3 +18,12 @@ export function formatSquareMeters(value: number): string {
 export function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many;
 }
+
+const monthYear = new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric", timeZone: "UTC" });
+
+/** ISO date "2006-07-07" -> "julio de 2006"; null for anything else. Read in UTC so the month never shifts a day. */
+export function formatMonthYear(isoDate: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return null;
+  const date = new Date(`${isoDate}T12:00:00Z`);
+  return Number.isNaN(date.getTime()) ? null : monthYear.format(date);
+}
