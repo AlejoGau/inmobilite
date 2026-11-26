@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Building, Ring } from "@/domain/types";
-import { rect } from "../testing/sampleArea";
-import { dot, triangles, windingMatchesNormals } from "../testing/geometryChecks";
+import { podiumAndTower, rect } from "../testing/sampleArea";
+import { coplanarOverlaps, dot, triangles, windingMatchesNormals } from "../testing/geometryChecks";
 import { BUILDING_SPEC, buildBuildingGeometry, FACADE_ATTRIBUTE } from "./buildingGeometry";
+import { floorHeightOf } from "./buildingPlan";
 
 function building(overrides: Partial<Building> & { footprint: Ring }): Building {
   const height = overrides.height ?? 12;
@@ -96,5 +97,79 @@ describe("building extrusion", () => {
     const sliver = buildBuildingGeometry(building({ footprint: rect(0, 0, 0.5, 10), height: 6, levels: 2 }));
     expect(sliver.rimHeight).toBe(6);
     expect(windingMatchesNormals(sliver.geometry)).toBe(true);
+  });
+});
+
+describe("multi-part buildings", () => {
+  /** Triangles of a geometry whose three corners all satisfy `inside` (three space). */
+  function facesWhere(geometry: ReturnType<typeof buildBuildingGeometry>["geometry"], inside: (p: [number, number, number]) => boolean) {
+    return [...triangles(geometry)].filter((t) => inside(t.a) && inside(t.b) && inside(t.c));
+  }
+  const windowed = (geometry: ReturnType<typeof buildBuildingGeometry>["geometry"], index: number) => geometry.getAttribute(FACADE_ATTRIBUTE).getZ(index * 3) > 0;
+
+  it("merges every part into one geometry, winding matching normals and no coplanar overlaps", () => {
+    const data = buildBuildingGeometry(podiumAndTower());
+    expect(data.partCount).toBe(3);
+    expect(windingMatchesNormals(data.geometry)).toBe(true);
+    expect(coplanarOverlaps(data.geometry)).toEqual([]);
+    // Every part starts at the ground.
+    let minY = Infinity;
+    const pos = data.geometry.getAttribute("position");
+    for (let i = 0; i < pos.count; i++) minY = Math.min(minY, pos.getY(i));
+    expect(minY).toBeCloseTo(0, 6);
+  });
+
+  it("draws no wall between abutting parts of equal height, and only the exposed band above a lower neighbour", () => {
+    const equal = building({ footprint: rect(0, 0, 20, 10), parts: [{ footprint: rect(0, 0, 10, 10), height: 12 }, { footprint: rect(10, 0, 20, 10), height: 12 }] });
+    const flat = buildBuildingGeometry(equal);
+    expect(coplanarOverlaps(flat.geometry)).toEqual([]);
+    expect(facesWhere(flat.geometry, ([x]) => Math.abs(x - 10) < 1e-6)).toEqual([]);
+
+    const stepped = building({ footprint: rect(0, 0, 20, 10), height: 30, levels: 10, parts: [{ footprint: rect(0, 0, 10, 10), height: 9 }, { footprint: rect(10, 0, 20, 10), height: 30 }] });
+    const data = buildBuildingGeometry(stepped);
+    expect(windingMatchesNormals(data.geometry)).toBe(true);
+    expect(coplanarOverlaps(data.geometry)).toEqual([]);
+    const shared = facesWhere(data.geometry, ([x]) => Math.abs(x - 10) < 1e-6);
+    expect(shared.length).toBeGreaterThan(0);
+    // The tower's wall over the podium starts at the podium's parapet, never down inside it.
+    for (const t of shared) expect(Math.min(t.a[1], t.b[1], t.c[1])).toBeGreaterThanOrEqual(9 - 1e-6);
+  });
+
+  it("keeps rooftop volumes and tiny parts as solid clay, without windows", () => {
+    const tower = buildBuildingGeometry(podiumAndTower());
+    const inMachineRoom = ([x, y, z]: [number, number, number]) => x >= -68 - 1e-6 && x <= -62 + 1e-6 && -z >= 46 - 1e-6 && -z <= 52 + 1e-6 && y > 75.6 + 1e-6;
+    const machineRoomFaces = facesWhere(tower.geometry, inMachineRoom);
+    expect(machineRoomFaces.length).toBeGreaterThan(0);
+    for (const t of machineRoomFaces) expect(windowed(tower.geometry, t.index)).toBe(false);
+    // The podium's street front does carry windows.
+    expect(facesWhere(tower.geometry, ([, , z]) => Math.abs(-z - 20) < 1e-6).some((t) => windowed(tower.geometry, t.index))).toBe(true);
+
+    const withKiosk = buildBuildingGeometry(
+      building({ footprint: rect(0, 0, 14, 10), parts: [{ footprint: rect(0, 0, 10, 10), height: 12 }, { footprint: rect(10, 0, 14, 4), height: 6 }] }),
+    );
+    // The kiosk's own faces; the main part's wall above it, on the plane x = 10, keeps its windows.
+    const kiosk = facesWhere(withKiosk.geometry, ([x, , z]) => x >= 10 - 1e-6 && -z <= 4 + 1e-6).filter((t) => (t.a[0] + t.b[0] + t.c[0]) / 3 > 10 + 1e-3);
+    expect(kiosk.length).toBeGreaterThan(0);
+    for (const t of kiosk) expect(windowed(withKiosk.geometry, t.index)).toBe(false);
+  });
+
+  it("uses the GCBA's real 2.8 m storeys, and height / levels for other sources", () => {
+    expect(floorHeightOf(podiumAndTower())).toBe(2.8);
+    expect(floorHeightOf(building({ footprint: rect(0, 0, 10, 10), height: 12, levels: 4 }))).toBe(3);
+    expect(floorHeightOf(building({ footprint: rect(0, 0, 10, 10), height: 40, levels: 4 }))).toBe(4.2);
+  });
+
+  it("adds no procedural machine room to GCBA buildings, which carry the real ones, and hangs the tag on the tallest part", () => {
+    const data = buildBuildingGeometry(podiumAndTower());
+    expect(data.wallHeight).toBeCloseTo(78.4, 6);
+    expect(data.topHeight).toBeCloseTo(78.4, 6);
+    const [x, y, z] = data.tagAnchor;
+    expect(y).toBeCloseTo(78.4, 6);
+    expect(x).toBeCloseTo(-65, 6);
+    expect(-z).toBeCloseTo(49, 6);
+    // A podium and tower from OpenStreetMap, which has no rooftop volumes, gets an invented machine room on the tower.
+    const gcba = podiumAndTower();
+    const osm = buildBuildingGeometry({ ...gcba, heightSource: "osm", parts: [gcba.parts[0], { footprint: rect(-80, 32, -50, 52), height: 75.6 }], height: 75.6 });
+    expect(osm.topHeight).toBeGreaterThan(osm.rimHeight + 1);
   });
 });

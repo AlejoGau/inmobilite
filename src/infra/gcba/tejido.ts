@@ -21,13 +21,16 @@ export const TEJIDO_TILE_URL = "https://vectortiles.usig.buenosaires.gob.ar/cur3
  */
 export const TEJIDO_ZOOM = 17;
 export const TEJIDO_LAYER = "default";
-/** CC BY 2.5 AR requires the credit wherever the volumes are shown. */
-export const TEJIDO_ATTRIBUTION = "Volumetría: Tejido Urbano, GCBA (CC BY 2.5 AR)";
+/** CC BY 2.5 AR requires the credit wherever the volumes are shown. The domain writes it into the model. */
+export { GCBA_ATTRIBUTION as TEJIDO_ATTRIBUTION } from "@/domain/area/areaFromTiles";
 
-/** A tile normally answers in well under a second; past this it is treated as failed. */
-export const TEJIDO_TILE_TIMEOUT_MS = 4_000;
-/** The whole call, every tile included, gets this long by default. */
-export const TEJIDO_BUDGET_MS = 6_000;
+/**
+ * A warm tile answers in 30-100 ms, but a cold one (not yet in the GCBA's CDN cache) was measured
+ * at ~9 s on 2026-11-26. The real volumes are the core of the scene, so the limits allow for a cold start.
+ */
+export const TEJIDO_TILE_TIMEOUT_MS = 10_000;
+/** The whole call, every tile included, gets this long by default (tiles are fetched in parallel). */
+export const TEJIDO_BUDGET_MS = 12_000;
 
 /** Downloads one tile: its bytes, or null when the tile is empty. Injected in tests. */
 export type TileFetcher = (url: string, options: FetchTileOptions) => Promise<Uint8Array | null>;

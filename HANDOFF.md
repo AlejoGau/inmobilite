@@ -3,17 +3,21 @@
 > Última actualización: 24/11/2026 (noche). Para retomar en otra máquina, con o sin Claude.
 > El plan de producto completo y las decisiones están en [PLAN.md](PLAN.md).
 
-## ⚠️ Fase 1 "edificios reales" EN CURSO (26/11/2026)
+## Fase 1 "edificios reales": ✅ terminada (26/11/2026, sin commitear)
 
-Decidido: volumen real de los 20 edificios con el **Tejido Urbano 3D del GCBA** (altura medida, basamento + torre, retiros) y calles/parques desde **tiles de OpenFreeMap** (Overpass solo como complemento). Después, fase 2: fachadas parecidas leídas de fotos con IA.
+- **Volumen real de los 20 edificios** con el Tejido Urbano 3D del GCBA (`src/infra/gcba`, `src/domain/area/gcbaBuildings.ts`): altura medida, basamento + torre, retiros. En Acoyte y Rivadavia: 20 edificios, 194 volúmenes, torres de 44,8 y 42 m, 0 alturas estimadas.
+- **Calles, parques y comercios desde tiles de OpenFreeMap** (`src/infra/openfreemap`, `src/domain/area/tileContext.ts`); Overpass solo como complemento opcional (3 s) para árboles y nombres.
+- **Composición** en `src/domain/area/composeArea.ts` + `areaFromTiles.ts`; los edificios toman nombre del comercio que tienen adentro (Mostaza, La Rocka…).
+- `/api/area`: header `X-Area-Source: tiles+gcba | tiles | fixture`; fallback offline con tiles guardados (`src/infra/offline/tileFixture.ts`, incluidos en el deploy vía `outputFileTracingIncludes`).
+- Panel: "alturas medidas" y atribución obligatoria del GCBA (CC BY 2.5 AR).
+- Escena: edificios de varias partes en una sola geometría por edificio, ventanas por piso real (2,8 m), sin tanques procedurales en datos GCBA. Toma final más abierta (45°, 150-210 m) para que las torres no tapen la esquina — **verificarla a ojo**.
+- 267 tests, typecheck, lint y build en verde.
 
-Estado del código (trabajo cortado a mitad para ahorrar consumo):
-- ✅ Contrato: `Building.parts` + `heightSource: "gcba"` (`src/domain/types.ts`), lector de tiles (`src/infra/tiles`, `src/domain/geo/tiles.ts`).
-- ✅ GCBA: `src/infra/gcba` + `src/domain/area/gcbaBuildings.ts` (terminado, con tests).
-- 🟡 OpenFreeMap: `src/infra/openfreemap` + `src/domain/area/tileContext.ts` — **2 tests fallan** (re-nodo de cruces y superficies superpuestas en bordes de tile).
-- 🟡 Escena con edificios de varias partes (`src/features/scene`): a medias.
-- ⬜ Falta: `composeArea`, conectar `/api/area`, fixture offline con tiles, atribución GCBA (CC BY 2.5 AR) en el panel.
-- ECC (everything-claude-code) instalado localmente en `.claude/` (perfil minimal, sin hooks); está en `.gitignore`.
+**Cosas a saber:**
+- Un tile del GCBA "frío" tardó ~9 s; los límites quedaron en 10 s por tile / 12 s total (`src/infra/gcba/tejido.ts`).
+- **Probar con Playwright contra `next start`, no contra `next dev`**: el log de consola que Playwright escribe en `.playwright-mcp/` dispara el watcher de Next y genera un loop de recompilación.
+- El 26/11 la GPU de la PC de la oficina estaba lenta (1 FPS incluso con la versión anterior); no es una regresión del código, pero conviene revisar FPS en otra máquina.
+- ECC (everything-claude-code) instalado localmente en `.claude/` (perfil minimal, sin hooks, solo reglas common/typescript/react/web); está en `.gitignore` y en los ignores de ESLint.
 
 ## Qué es el demo
 

@@ -1,5 +1,3 @@
-import type { OverpassNode } from "../osm/overpass";
-import type { Projection } from "../geo/projection";
 import type { Building, Park, Road, RoadClass, Ring, Tree, Vec2 } from "../types";
 import { pointInRing, polygonArea } from "../geo/polygon";
 import { PointGrid } from "../geo/pointGrid";
@@ -7,7 +5,6 @@ import { SegmentGrid } from "../geo/segmentGrid";
 import { polylineLength } from "../geo/polyline";
 import { add, distance, length, lerp, round3, roundVec, scale, sub } from "../geo/vec";
 import { hashString, mulberry32, randomBetween } from "../seed";
-import { tagsOf } from "./osmElements";
 
 export const MAX_TREES = 600;
 export const TREE_SCALE_RANGE = [0.7, 1.3] as const;
@@ -41,8 +38,8 @@ interface RoadInfo {
 export interface TreeInput {
   seed: number;
   radius: number;
-  projection: Projection;
-  nodes: OverpassNode[];
+  /** Trees mapped in OSM, already projected to local meters. Any order: they are sorted here. */
+  mappedTrees: readonly Vec2[];
   roads: Road[];
   sidewalkIds: ReadonlySet<string>;
   buildings: Building[];
@@ -50,12 +47,13 @@ export interface TreeInput {
 }
 
 /**
- * Real OSM trees plus deterministic street and park trees. Order of the
+ * Mapped OSM trees plus deterministic street and park trees, none inside a
+ * building part. Order of the
  * output: closest to the origin first, so the director can stagger them.
  */
 export function placeTrees(input: TreeInput): Tree[] {
   const placer = new TreePlacer(input);
-  placer.addOsmTrees(input.nodes, input.projection);
+  placer.addMappedTrees(input.mappedTrees);
   for (const road of input.roads) {
     if (STREET_TREE_CLASSES.has(road.cls)) placer.addStreetTrees(road);
   }
@@ -67,7 +65,8 @@ class TreePlacer {
   private readonly trees: Tree[] = [];
   private readonly spacing = new PointGrid(PARK_TREE_MIN_GAP);
   private readonly roadGrid: SegmentGrid<RoadInfo>;
-  private readonly buildingBoxes: { ring: Ring; box: [number, number, number, number] }[];
+  /** Every part of every building, not just the outline: a part may reach past the outline's simplified ring. */
+  private readonly partBoxes: { ring: Ring; box: [number, number, number, number] }[];
 
   constructor(private readonly input: TreeInput) {
     const maxHalfWidth = Math.max(0, ...input.roads.map((r) => r.width / 2));
@@ -80,15 +79,21 @@ class TreePlacer {
       };
       for (let i = 0; i < road.points.length - 1; i++) this.roadGrid.insert(road.points[i], road.points[i + 1], info);
     }
-    this.buildingBoxes = input.buildings.map((b) => ({ ring: b.footprint, box: boundingBox(b.footprint) }));
+    this.partBoxes = input.buildings.flatMap((b) =>
+      [b.footprint, ...b.parts.map((part) => part.footprint)].map((ring) => ({ ring, box: boundingBox(ring) })),
+    );
   }
 
-  addOsmTrees(nodes: OverpassNode[], projection: Projection): void {
-    for (const node of nodes) {
-      if (tagsOf(node).natural !== "tree") continue;
-      const p = roundVec(projection.toLocal(node.lon, node.lat));
+  /**
+   * Sorted first: the spacing grid makes acceptance order-dependent, and the
+   * sources (Overpass, a fixture) do not promise any order. The scale is
+   * seeded by the position, the only identity every source shares.
+   */
+  addMappedTrees(mapped: readonly Vec2[]): void {
+    const sorted = mapped.map(roundVec).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    for (const p of sorted) {
       if (length(p) > this.input.radius || this.insideBuilding(p)) continue;
-      this.accept(p, mulberry32(hashString(`${this.input.seed}:node/${node.id}`)));
+      this.accept(p, mulberry32(hashString(`${this.input.seed}:tree/${p[0]},${p[1]}`)));
     }
   }
 
@@ -144,7 +149,7 @@ class TreePlacer {
   }
 
   private insideBuilding(p: Vec2): boolean {
-    return this.buildingBoxes.some(
+    return this.partBoxes.some(
       ({ ring, box }) => p[0] >= box[0] && p[0] <= box[2] && p[1] >= box[1] && p[1] <= box[3] && pointInRing(p, ring),
     );
   }

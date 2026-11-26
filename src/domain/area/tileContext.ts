@@ -1,5 +1,6 @@
 import { intersect } from "@turf/intersect";
 import { union } from "@turf/union";
+import { difference } from "@turf/difference";
 import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
 import type { Feature, Geometry, MultiPolygon, Polygon, Position } from "geojson";
 import type { Projection } from "../geo/projection";
@@ -280,11 +281,26 @@ function nodeCarriageways(pieces: RoadPiece[]): RoadPiece[] {
         const hit = closestInterior(end, out[j].points);
         if (hit) addInsertion(j, { segment: hit.segment, t: hit.t, point: end });
       }
-      // X: both interiors cross. Each unordered pair is handled once.
+      // X: the two cross. Each unordered pair is handled once.
       if (i < j) {
-        for (const x of interiorCrossings(out[i].points, out[j].points)) {
-          addInsertion(i, { segment: x.segmentA, t: x.tA, point: x.point });
-          addInsertion(j, { segment: x.segmentB, t: x.tB, point: x.point });
+        for (const x of segmentCrossings(out[i].points, out[j].points)) {
+          if (x.vertexA === undefined && x.vertexB === undefined) {
+            addInsertion(i, { segment: x.segmentA, t: x.tA, point: x.point });
+            addInsertion(j, { segment: x.segmentB, t: x.tB, point: x.point });
+          } else if (x.vertexB === undefined) {
+            // The crossing sits next to a vertex of i only: that vertex becomes the junction, threaded into j.
+            const v = out[i].points[x.vertexA as number];
+            addInsertion(j, { segment: x.segmentB, t: closestTOnSegment(v, out[j].points[x.segmentB], out[j].points[x.segmentB + 1]), point: v });
+          } else if (x.vertexA === undefined) {
+            const v = out[j].points[x.vertexB];
+            addInsertion(i, { segment: x.segmentA, t: closestTOnSegment(v, out[i].points[x.segmentA], out[i].points[x.segmentA + 1]), point: v });
+          } else {
+            // Next to a vertex of each: both collapse onto the smaller one, so the choice does not depend on input order.
+            const [va, vb] = [out[i].points[x.vertexA], out[j].points[x.vertexB]];
+            const shared = compareVec(va, vb) <= 0 ? va : vb;
+            out[i].points[x.vertexA] = shared;
+            out[j].points[x.vertexB] = shared;
+          }
         }
       }
     }
@@ -337,20 +353,40 @@ interface Crossing {
   tA: number;
   segmentB: number;
   tB: number;
+  /** Index of the vertex of a within the snap distance of the crossing, if any. */
+  vertexA?: number;
+  vertexB?: number;
 }
 
-/** Proper crossings, away from every vertex of both polylines (those are T or shared-vertex cases). */
-function interiorCrossings(a: Vec2[], b: Vec2[]): Crossing[] {
+/**
+ * Proper crossings of two polylines. A crossing a few decimetres from a
+ * vertex is reported with that vertex: inserting a second point that close
+ * would leave a sliver segment, so the caller reuses the vertex instead.
+ * Crossings already on a shared vertex never show up (segmentIntersection
+ * excludes the segment ends).
+ */
+function segmentCrossings(a: Vec2[], b: Vec2[]): Crossing[] {
   const crossings: Crossing[] = [];
   for (let s = 0; s < a.length - 1; s++) {
     for (let u = 0; u < b.length - 1; u++) {
       const hit = segmentIntersection(a[s], a[s + 1], b[u], b[u + 1]);
       if (!hit) continue;
-      const clear = [a[s], a[s + 1], b[u], b[u + 1]].every((v) => distance(v, hit.point) >= NODE_SNAP_DISTANCE);
-      if (clear) crossings.push({ point: hit.point, segmentA: s, tA: hit.t, segmentB: u, tB: hit.u });
+      const crossing: Crossing = { point: hit.point, segmentA: s, tA: hit.t, segmentB: u, tB: hit.u };
+      const vertexA = nearVertex(hit.point, a, s);
+      const vertexB = nearVertex(hit.point, b, u);
+      if (vertexA !== undefined) crossing.vertexA = vertexA;
+      if (vertexB !== undefined) crossing.vertexB = vertexB;
+      crossings.push(crossing);
     }
   }
   return crossings;
+}
+
+/** The end of segment `s` of `pts` within the snap distance of p (the closer one), if any. */
+function nearVertex(p: Vec2, pts: Vec2[], s: number): number | undefined {
+  const [d0, d1] = [distance(p, pts[s]), distance(p, pts[s + 1])];
+  if (Math.min(d0, d1) >= NODE_SNAP_DISTANCE) return undefined;
+  return d0 <= d1 ? s : s + 1;
 }
 
 function segmentIntersection(p: Vec2, p2: Vec2, q: Vec2, q2: Vec2): { point: Vec2; t: number; u: number } | null {
@@ -510,14 +546,21 @@ function joinAt(a: RoadPiece, b: RoadPiece, key: string): RoadPiece {
 // --- output
 
 function finishRoads(pieces: RoadPiece[]): TileRoads {
-  const rounded = pieces.map((piece) => ({ ...piece, points: piece.points.map(roundVec) }));
+  // A stitched line runs whichever way its first piece ran, which depends on the input order; the
+  // contract carries no direction (no one-ways), so each line is oriented from its smaller end.
+  const rounded = pieces.map((piece) => {
+    const pts = piece.points.map(roundVec);
+    return { ...piece, points: compareVec(pts[pts.length - 1], pts[0]) < 0 ? pts.reverse() : pts };
+  });
   rounded.sort(
     (a, b) =>
       compareVec(a.points[0], b.points[0]) ||
       compareVec(a.points[a.points.length - 1], b.points[b.points.length - 1]) ||
       a.cls.localeCompare(b.cls) ||
       (a.name ?? "").localeCompare(b.name ?? "") ||
-      a.points.length - b.points.length,
+      a.points.length - b.points.length ||
+      // The two carriageways of a divided avenue can share both ends and the vertex count.
+      ringSignature(a.points).localeCompare(ringSignature(b.points)),
   );
 
   const used = new Set<string>();
@@ -734,13 +777,13 @@ export function extractFallbackBuildings(features: VectorFeature[], projection: 
   }
 
   const candidates = mergeAcrossTiles(fragments)
-    .map(({ ring, height }) => ({ ring, height, area: polygonArea(ring), center: centroid(ring) }))
-    .filter((c) => c.area >= MIN_BUILDING_AREA)
-    .map((c) => ({ ...c, distance: length(c.center), signature: ringSignature(c.ring.map(roundVec)) }));
-  candidates.sort((a, b) => a.distance - b.distance || a.signature.localeCompare(b.signature));
+    .map(({ ring, height }) => describeCandidate(ring, height))
+    .filter((c) => c.area >= MIN_BUILDING_AREA);
+  candidates.sort(compareCandidates);
+  const kept = removeOverlaps(candidates, FALLBACK_CANDIDATES);
 
   const used = new Set<string>();
-  return candidates.slice(0, FALLBACK_CANDIDATES).map((c) => {
+  return kept.map((c) => {
     const id = geometryId("ofm:building:", c.signature, used);
     const seed = hashString(id);
     const tags: Record<string, string> = c.height !== DEFAULT_RENDER_HEIGHT ? { height: String(c.height) } : {};
@@ -758,6 +801,80 @@ export function extractFallbackBuildings(features: VectorFeature[], projection: 
       seed,
     };
   });
+}
+
+interface Candidate {
+  ring: Ring;
+  height: number;
+  area: number;
+  distance: number;
+  signature: string;
+  box: Box;
+}
+
+function describeCandidate(ring: Ring, height: number): Candidate {
+  return {
+    ring,
+    height,
+    area: polygonArea(ring),
+    distance: length(centroid(ring)),
+    signature: ringSignature(ring.map(roundVec)),
+    box: expandedBox(ring, 0),
+  };
+}
+
+function compareCandidates(a: Candidate, b: Candidate): number {
+  return a.distance - b.distance || a.signature.localeCompare(b.signature);
+}
+
+/** Overlaps below this (m²) are rounding noise on a shared party wall, not worth a boolean operation. */
+const MIN_OVERLAP_AREA = 0.05;
+
+/**
+ * The z14 simplification moves the vertices of neighbouring buildings
+ * independently, so footprints that only shared a wall in OSM come out
+ * overlapping by a few square metres (the prisms would interpenetrate and
+ * their roofs z-fight). Walking closest first, each candidate loses whatever
+ * the ones already kept cover; one trimmed away to a sliver is dropped. Stops
+ * at `limit` kept, and returns them re-sorted, since trimming moves centroids.
+ */
+function removeOverlaps(sorted: Candidate[], limit: number): Candidate[] {
+  const kept: Candidate[] = [];
+  for (const candidate of sorted) {
+    if (kept.length >= limit) break;
+    const trimmed = trimAgainst(candidate, kept);
+    if (trimmed) kept.push(trimmed);
+  }
+  return kept.sort(compareCandidates);
+}
+
+function trimAgainst(candidate: Candidate, kept: Candidate[]): Candidate | null {
+  const blockers = kept.filter((k) => boxesOverlap(k.box, candidate.box));
+  if (blockers.length === 0) return candidate;
+  let shape: Feature<Polygon | MultiPolygon> | null = turfPolygon([closeRing(candidate.ring)]);
+  let changed = false;
+  for (const blocker of blockers) {
+    if (!shape) break;
+    const blockerShape = turfPolygon([closeRing(blocker.ring)]);
+    const overlap = intersect(featureCollection([shape, blockerShape]));
+    if (!overlap || outerRingsOf(overlap).reduce((sum, r) => sum + polygonArea(toVecs(r)), 0) < MIN_OVERLAP_AREA) continue;
+    shape = difference(featureCollection([shape, blockerShape]));
+    changed = true;
+  }
+  if (!changed) return candidate;
+  if (!shape) return null;
+  // A Building has one footprint; the largest remaining piece stands for it (as in buildings.ts).
+  const rings = outerRingsOf(shape)
+    .map((outer) => normalizeRing(toVecs(outer)))
+    .filter((r): r is Ring => r !== null);
+  const largest = rings.reduce<Ring | null>((best, r) => (!best || polygonArea(r) > polygonArea(best) ? r : best), null);
+  if (!largest) return null;
+  const trimmed = describeCandidate(largest, candidate.height);
+  return trimmed.area >= MIN_BUILDING_AREA ? trimmed : null;
+}
+
+function toVecs(ring: Position[]): Vec2[] {
+  return ring.map((p): Vec2 => [p[0], p[1]]);
 }
 
 /**

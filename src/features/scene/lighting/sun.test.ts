@@ -33,6 +33,15 @@ describe("sun", () => {
     expect((f.right - f.left) / 2048).toBeLessThan(0.2);
     expect(f.near).toBeGreaterThan(0);
   });
+
+  it("covers the top of a 75 m tower: the bounds follow each part, not the footprint", () => {
+    const points = shadowPoints(sampleArea());
+    const tallest = Math.max(...points.map((p) => p[1]));
+    // The sample's podium-and-tower reaches 78.4 m with its machine room; its shadow lands on the model.
+    expect(tallest).toBeGreaterThanOrEqual(78.4);
+    // The podium's street-front corners are covered at the podium's own height, not lifted to the tower's.
+    expect(points.some(([x, y, z]) => x === -80 && z === -20 && Math.abs(y - 8.4 - 1) < 1e-6)).toBe(true);
+  });
 });
 
 describe("tree geometry", () => {

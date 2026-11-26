@@ -26,14 +26,18 @@ export interface OrbitPose {
 export const INTRO_START = HANDOFF_CAMERA;
 
 export const HERO_SPEC = {
-  /** Tilt from straight down; 50° means looking 40° below the horizon. */
-  polarDeg: 50,
+  /**
+   * Tilt from straight down; 45° means looking 45° below the horizon. Steeper than a
+   * street-level shot because the real GCBA towers (up to ~45 m) otherwise hide the corner.
+   */
+  polarDeg: 45,
   /** Looking north-east, so the west faces lit by the setting sun face the viewer. */
   bearingDeg: 52,
   bearingJitterDeg: 8,
   fovDeg: 38,
-  minDistance: 110,
-  maxDistance: 150,
+  /** Far enough that the real towers do not fill the frame and the corner stays visible. */
+  minDistance: 150,
+  maxDistance: 210,
   /**
    * Share of the buildings (closest first) the hero shot must frame. The 20
    * closest buildings can spread over 150+ m; framing every one of them would

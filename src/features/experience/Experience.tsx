@@ -158,7 +158,7 @@ export function Experience() {
         <InfoPanel
           label={destination.label}
           secondary={destination.secondary}
-          stats={area.stats}
+          area={area}
           showLabels={state.showLabels}
           onToggleLabels={() => dispatch({ type: "toggleLabels" })}
           onReplay={() => dispatch({ type: "replay" })}

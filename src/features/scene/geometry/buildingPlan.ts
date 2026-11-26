@@ -44,7 +44,7 @@ export const PLAN_SPEC = {
 
 /**
  * - "facade": a regular volume, with windows and a parapet.
- * - "tiny": too small for a facade of its own; it joins a neighbour's window grid if it is flush with it, and has no parapet.
+ * - "tiny": too small for a facade of its own (a kiosk, a sliver the photogrammetry cut off): solid clay, no windows, no parapet.
  * - "rooftop": a machine room or tank poking out of a roof: solid clay, no windows, no parapet.
  */
 export type PartKind = "facade" | "tiny" | "rooftop";
@@ -341,8 +341,8 @@ interface Stretch {
  * Groups the exposed wall stretches that lie on one plane into runs, and lays
  * the window grid out per run. A tower flush with its podium, or a facade the
  * photogrammetry cut into slivers, then reads as one facade with continuous
- * window columns instead of a patchwork of small grids. Rooftop volumes stay
- * blind; a run made only of tiny parts stays blind too.
+ * window columns instead of a patchwork of small grids. Rooftop volumes and
+ * tiny parts stay blind.
  */
 function layoutFacades(parts: PlannedPart[]): Map<string, FacadeLayout> {
   const stretches: Stretch[] = [];
@@ -377,8 +377,9 @@ function layoutFacades(parts: PlannedPart[]): Map<string, FacadeLayout> {
     const flush = () => {
       const start = run[0].s0;
       const centre = (start + runEnd) / 2;
-      const half = run.some((s) => s.windowed) ? (runEnd - start) / 2 : 0;
-      for (const s of run) layouts.set(s.key, { u0: s.s0 - centre, u1: s.s1 - centre, halfLength: half, runId });
+      const half = (runEnd - start) / 2;
+      // Blind stretches still count towards the run's extent, so the grid stays centred on the whole facade.
+      for (const s of run) layouts.set(s.key, { u0: s.s0 - centre, u1: s.s1 - centre, halfLength: s.windowed ? half : 0, runId });
       runId++;
       run = [];
     };

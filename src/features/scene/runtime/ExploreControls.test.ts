@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { AreaModel, Building } from "@/domain/types";
 import { createDirector } from "../director/director";
 import { mountStage, placeCamera, withRuntime, type StageHarness } from "../testing/r3fHarness";
-import { rect, sampleArea } from "../testing/sampleArea";
+import { partCorners } from "../geometry/buildingExtent";
+import { podiumAndTower, rect, sampleArea } from "../testing/sampleArea";
 import { EXPLORE_LIMITS, exploreTargetBounds, ExploreControls, focusFor, type BuildingFocus } from "./ExploreControls";
 import { FrameBus } from "./frameBus";
 
@@ -87,6 +88,18 @@ describe("ExploreControls", () => {
 
     const target = explore.controls().getTarget(new Vector3());
     expect(target.distanceTo(new Vector3(...focus.centre))).toBeLessThan(0.5);
+  });
+});
+
+describe("focusFor", () => {
+  it("holds every corner of every part of a podium-and-tower building, at its own height", () => {
+    const building = podiumAndTower();
+    const focus = focusFor(building);
+    const centre = new Vector3(...focus.centre);
+    for (const [x, north, height] of partCorners(building)) {
+      for (const y of [0, height]) expect(new Vector3(x, y, -north).distanceTo(centre)).toBeLessThanOrEqual(focus.radius + 1e-6);
+    }
+    expect(focus.centre[1]).toBeCloseTo(building.height / 2, 6);
   });
 });
 

@@ -11,10 +11,18 @@ export const BUILDING_USE_LABELS: Record<BuildingUse, string> = {
   other: "Otro",
 };
 
-export const ATTRIBUTION = "© OpenStreetMap contributors · Geocoding USIG/Georef/Photon";
+export const GEOCODING_CREDIT = "Geocoding USIG/Georef/Photon";
+
+/** The area's data credits (they change with the sources that built it) plus the geocoders'. */
+export function credits(areaAttribution: string): string {
+  return areaAttribution ? `${areaAttribution} · ${GEOCODING_CREDIT}` : GEOCODING_CREDIT;
+}
 
 export const ESTIMATED_HEIGHTS_HELP =
   "Si OpenStreetMap trae la cantidad de pisos o la altura, usamos ese dato. Si no, la estimamos a partir del uso y la superficie del edificio.";
+
+export const MEASURED_HEIGHTS_HELP =
+  "Los volúmenes salen del modelo 3D de la ciudad del Gobierno de Buenos Aires (Tejido Urbano): cada altura está medida, no estimada.";
 
 export function flyingStatus(label: string): string {
   return `Volando a ${label}…`;
@@ -33,4 +41,8 @@ export function buildingsModelled(count: number): string {
 
 export function estimatedHeights(count: number): string {
   return plural(count, "altura estimada", "alturas estimadas");
+}
+
+export function measuredHeights(count: number): string {
+  return plural(count, "altura medida", "alturas medidas");
 }

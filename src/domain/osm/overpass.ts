@@ -100,3 +100,24 @@ export function buildOverpassQuery(origin: LngLat, radius: number = DEFAULT_AREA
     `);out geom;`
   );
 }
+
+/** Server-side limit for the complement query: the caller only waits about this long anyway. */
+export const COMPLEMENT_QUERY_TIMEOUT_S = 3;
+
+/**
+ * The light query that complements the tiles: the vector tiles have no trees
+ * and no building names, Overpass does. Only named buildings, and no
+ * relations, so the answer stays small and fast even on a busy mirror.
+ */
+export function buildComplementQuery(origin: LngLat, radius: number = DEFAULT_AREA_RADIUS): string {
+  const lat = origin.lat.toFixed(6);
+  const lng = origin.lng.toFixed(6);
+  const r = Math.round(radius);
+  const rb = Math.round(Math.min(BUILDING_SEARCH_RADIUS, radius));
+  return (
+    `[out:json][timeout:${COMPLEMENT_QUERY_TIMEOUT_S}];(` +
+    `node["natural"="tree"](around:${r},${lat},${lng});` +
+    `way["building"]["name"](around:${rb},${lat},${lng});` +
+    `);out geom;`
+  );
+}

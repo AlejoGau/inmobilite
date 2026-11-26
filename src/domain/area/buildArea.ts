@@ -1,13 +1,11 @@
-import type { AreaModel, LngLat } from "../types";
-import { DEFAULT_AREA_RADIUS, type OverpassResponse } from "../osm/overpass";
-import { createProjection } from "../geo/projection";
-import { seedFromOrigin } from "../seed";
+import type { AreaModel, LngLat, Vec2 } from "../types";
+import { DEFAULT_AREA_RADIUS, type OverpassNode, type OverpassResponse } from "../osm/overpass";
+import { createProjection, type Projection } from "../geo/projection";
 import { extractBuildings } from "./buildings";
-import { buildLabels, rankStreets } from "./labels";
-import { sortElements } from "./osmElements";
+import { composeArea } from "./composeArea";
+import { sortElements, tagsOf } from "./osmElements";
 import { extractParks } from "./parks";
 import { extractRoads } from "./roads";
-import { placeTrees } from "./trees";
 
 export const OSM_ATTRIBUTION = "© OpenStreetMap contributors";
 
@@ -23,29 +21,24 @@ export interface BuildAreaInput {
  */
 export function buildArea({ origin, osm, radius = DEFAULT_AREA_RADIUS }: BuildAreaInput): AreaModel {
   const projection = createProjection(origin);
-  const seed = seedFromOrigin(origin);
   const { ways, nodes, relations } = sortElements(osm);
-
   const { roads, sidewalkIds } = extractRoads(ways, projection, radius);
-  const buildings = extractBuildings(ways, projection, relations);
-  const parks = extractParks(ways, projection, radius, relations);
-  const trees = placeTrees({ seed, radius, projection, nodes, roads, sidewalkIds, buildings, parks });
-  const streets = rankStreets(roads);
 
-  return {
-    origin: { lng: origin.lng, lat: origin.lat },
+  return composeArea({
+    origin,
     radius,
-    seed,
     roads,
-    buildings,
-    parks,
-    trees,
-    labels: buildLabels(streets),
-    stats: {
-      buildings: buildings.length,
-      estimatedHeights: buildings.filter((b) => b.heightSource === "estimated").length,
-      streets: streets.map((s) => s.name),
-    },
-    attribution: OSM_ATTRIBUTION,
-  };
+    sidewalkIds,
+    parks: extractParks(ways, projection, radius, relations),
+    mappedTrees: mappedTrees(nodes, projection),
+    candidates: extractBuildings(ways, projection, relations),
+    // Overpass buildings already carry their OSM names and uses.
+    pois: [],
+    attributions: [OSM_ATTRIBUTION],
+  });
+}
+
+/** The natural=tree nodes, projected. */
+export function mappedTrees(nodes: readonly OverpassNode[], projection: Projection): Vec2[] {
+  return nodes.filter((node) => tagsOf(node).natural === "tree").map((node) => projection.toLocal(node.lon, node.lat));
 }

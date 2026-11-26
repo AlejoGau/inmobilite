@@ -1,9 +1,11 @@
+import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
+import { union } from "@turf/union";
 import type { BufferGeometry } from "three";
 import { mulberry32, randomBetween } from "@/domain/seed";
 import type { Building, Ring, Vec2 } from "@/domain/types";
 import { facadeKey, planBuilding, PLAN_SPEC, spanTop, type FacadeLayout, type PlannedPart, type WallSpan } from "./buildingPlan";
 import { MeshBuilder, toScene, type Vec3 } from "./meshBuilder";
-import { cleanRing, distance, normalize, pointInRing, ringCentroid, signedArea, sub, triangulatePolygon, withOrientation } from "./polygon2d";
+import { cleanRing, distance, normalize, pointInRing, ringCentroid, signedArea, sub, triangulatePolygon, withOrientation, type PolygonWithHoles } from "./polygon2d";
 
 /** Per-vertex attribute the facade shader reads: (u along the facade run, run id, half run length; 0 = no windows). */
 export const FACADE_ATTRIBUTE = "facade";
@@ -268,6 +270,51 @@ function addParapets(builder: MeshBuilder, part: PlannedPart): void {
   });
 }
 
+/** Roofs of parts within this many meters of each other count as one level. */
+const SAME_ROOF_TOLERANCE = 1e-3;
+
+/**
+ * Roof outlines at one level, as polygons with holes. Parts of equal height
+ * are merged first: their source footprints can overlap by a sliver
+ * (photogrammetry noise, a few cm wide), and two slabs on the same plane
+ * there would z-fight. Merging also drops the seams across a flat roof.
+ */
+function mergedRoofs(rings: Ring[]): PolygonWithHoles[] {
+  if (rings.length === 1) return [{ outer: rings[0], holes: [] }];
+  try {
+    const merged = union(featureCollection(rings.map((ring) => turfPolygon([[...ring, ring[0]].map(([x, y]) => [x, y])]))));
+    if (!merged) return [];
+    const polygons = merged.geometry.type === "Polygon" ? [merged.geometry.coordinates] : merged.geometry.coordinates;
+    const out: PolygonWithHoles[] = [];
+    for (const [outer, ...holes] of polygons) {
+      const ring = withOrientation(cleanRing(outer.map(([x, y]): Vec2 => [x, y])), true);
+      if (ring.length < 3) continue;
+      out.push({ outer: ring, holes: holes.map((h) => withOrientation(cleanRing(h.map(([x, y]): Vec2 => [x, y])), false)).filter((h) => h.length >= 3) });
+    }
+    return out;
+  } catch {
+    // A degenerate union: separate slabs z-fight on a sliver at worst, which beats a missing roof.
+    return rings.map((outer) => ({ outer, holes: [] }));
+  }
+}
+
+/** Roof slabs of every part, one merged slab per roof level. */
+function addRoofs(builder: MeshBuilder, parts: PlannedPart[]): void {
+  const levels: PlannedPart[][] = [];
+  for (const part of [...parts].sort((a, b) => a.height - b.height)) {
+    const level = levels[levels.length - 1];
+    if (level && part.height - level[0].height <= SAME_ROOF_TOLERANCE) level.push(part);
+    else levels.push([part]);
+  }
+  for (const level of levels) {
+    const height = level[0].height;
+    const rim = Math.max(...level.map((p) => p.height + p.parapetHeight));
+    builder.setAttribute(FACADE_TOP_ATTRIBUTE, [height, rim, Math.max(...level.map((p) => p.levels))]);
+    // The whole footprint: under a parapet the slab is hidden inside its solid, and it never shares a plane with it.
+    for (const roof of mergedRoofs(level.map((p) => p.ring))) addFlatTop(builder, roof.outer, roof.holes, height);
+  }
+}
+
 function tallestPart(parts: PlannedPart[]): PlannedPart | null {
   let best: PlannedPart | null = null;
   for (const part of parts) {
@@ -293,10 +340,8 @@ export function buildBuildingGeometry(building: Building): BuildingMeshData {
     rimHeight = Math.max(rimHeight, rim);
     addPartWalls(builder, part, index, plan.facades);
     addParapets(builder, part);
-    builder.setAttribute(FACADE_TOP_ATTRIBUTE, [part.height, rim, part.levels]);
-    // The whole footprint: under a parapet the slab is hidden inside its solid, and it never shares a plane with it.
-    addFlatTop(builder, part.ring, [], part.height);
   });
+  addRoofs(builder, plan.parts);
 
   const tallest = tallestPart(plan.parts);
   let topHeight = rimHeight;

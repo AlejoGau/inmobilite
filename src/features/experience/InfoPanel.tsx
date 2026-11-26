@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState, type ReactNode } from "react";
-import type { AreaStats } from "@/domain/types";
+import type { AreaModel } from "@/domain/types";
 import { Button } from "@/ui/Button";
 import { cn } from "@/ui/cn";
 import { formatInteger } from "@/ui/format";
@@ -9,14 +9,14 @@ import { GlassPanel } from "@/ui/GlassPanel";
 import { ChevronIcon, ReplayIcon, SearchIcon, TagIcon } from "@/ui/icons";
 import { InfoTip } from "@/ui/InfoTip";
 import { Switch } from "@/ui/Switch";
-import { ATTRIBUTION, buildingsModelled, ESTIMATED_HEIGHTS_HELP, estimatedHeights } from "./copy";
+import { buildingsModelled, credits, ESTIMATED_HEIGHTS_HELP, estimatedHeights, MEASURED_HEIGHTS_HELP, measuredHeights } from "./copy";
 
 const MAX_STREETS = 6;
 
 interface InfoPanelProps {
   label: string;
   secondary?: string;
-  stats: AreaStats;
+  area: Pick<AreaModel, "stats" | "buildings" | "attribution">;
   showLabels: boolean;
   onToggleLabels: () => void;
   onReplay: () => void;
@@ -24,13 +24,17 @@ interface InfoPanelProps {
 }
 
 /** Left glass card on desktop; a collapsible bottom sheet on phones. */
-export function InfoPanel({ label, secondary, stats, showLabels, onToggleLabels, onReplay, onNewSearch }: InfoPanelProps) {
+export function InfoPanel({ label, secondary, area, showLabels, onToggleLabels, onReplay, onNewSearch }: InfoPanelProps) {
   const titleId = useId();
   const statsId = useId();
   const detailsId = useId();
   // Phones start collapsed so the scene stays the hero; desktop ignores this.
   const [expanded, setExpanded] = useState(false);
+  const { stats } = area;
   const streets = stats.streets.slice(0, MAX_STREETS);
+  // "Measured" only when every height is real AND comes from the GCBA model: the tooltip says so.
+  const gcbaHeights = area.buildings.filter((b) => b.heightSource === "gcba").length;
+  const showMeasured = stats.estimatedHeights === 0 && gcbaHeights > 0;
 
   return (
     <GlassPanel
@@ -65,11 +69,19 @@ export function InfoPanel({ label, secondary, stats, showLabels, onToggleLabels,
           positioned and a scroll container would clip it. */}
       <dl id={statsId} className={cn("mt-5 grid grid-cols-2 gap-x-4 gap-y-1", !expanded && "max-md:hidden")}>
         <Stat value={stats.buildings} label={buildingsModelled(stats.buildings)} />
-        <Stat
-          value={stats.estimatedHeights}
-          label={estimatedHeights(stats.estimatedHeights)}
-          help={<InfoTip label="Cómo se calculan las alturas" placement="bottom-end">{ESTIMATED_HEIGHTS_HELP}</InfoTip>}
-        />
+        {showMeasured ? (
+          <Stat
+            value={gcbaHeights}
+            label={measuredHeights(gcbaHeights)}
+            help={<InfoTip label="De dónde salen las alturas" placement="bottom-end">{MEASURED_HEIGHTS_HELP}</InfoTip>}
+          />
+        ) : (
+          <Stat
+            value={stats.estimatedHeights}
+            label={estimatedHeights(stats.estimatedHeights)}
+            help={<InfoTip label="Cómo se calculan las alturas" placement="bottom-end">{ESTIMATED_HEIGHTS_HELP}</InfoTip>}
+          />
+        )}
       </dl>
 
       {/* Scrolls when the viewport is short (a 1366×650 laptop), so it never runs under the buttons. */}
@@ -90,7 +102,7 @@ export function InfoPanel({ label, secondary, stats, showLabels, onToggleLabels,
           </section>
         )}
 
-        <p className="mt-6 text-xs leading-relaxed text-text-muted">{ATTRIBUTION}</p>
+        <p className="mt-6 text-xs leading-relaxed text-text-muted">{credits(area.attribution)}</p>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 md:mt-6">

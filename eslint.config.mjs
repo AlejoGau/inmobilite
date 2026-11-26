@@ -35,6 +35,8 @@ const eslintConfig = defineConfig([
     // MapLibre's minified worker, copied in by scripts/copy-maplibre-worker.mjs.
     // It is generated and not ours to fix: linting it adds 1000+ warnings.
     "public/vendor/**",
+    // Everything Claude Code (ECC), installed locally for Claude and gitignored: not app code.
+    ".claude/**",
   ]),
 ]);
 
